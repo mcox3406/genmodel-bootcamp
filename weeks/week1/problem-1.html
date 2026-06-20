@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 1 Problem 1 - Generative Modeling Bootcamp</title>
+  <meta name="description" content="Start with the basic claim that generation is sampling, then ask what that claim hides for molecules and crystals." />
+  <link rel="stylesheet" href="../../assets/style.css" />
+  
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(', '\\)'], ['$', '$']],
+    displayMath: [['\\[', '\\]']]
+  },
+  svg: { fontCache: 'global' }
+};
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="wide">
+    <a class="brand" href="../../index.html">GenModel Bootcamp</a>
+    <nav class="navlinks" aria-label="Site">
+      <a href="../../index.html">Overview</a>
+      <a href="../../docs/syllabus.pdf">Syllabus</a>
+    </nav>
+    <nav class="weekstrip" aria-label="Weeks">
+      <span class="weekstrip-label">Week</span>
+      <a href="../week1.html" class="active">1</a><a href="../week2.html">2</a><a href="../week3.html">3</a><a href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
+    </nav>
+  </div>
+</nav>
+
+<header class="page">
+  <div class="wrap">
+    <div class="kicker">Week 1 · Problem 1 of 6</div>
+    <h1 class="title">Data distributions, representations, and physical symmetries</h1>
+    <p class="subtitle">Start with the basic claim that generation is sampling, then ask what that claim hides for molecules and crystals.</p>
+    <nav class="actions" aria-label="Problem navigation"><a class="action" href="../week1.html">Week 1 overview</a><a class="action" href="../../docs/syllabus.pdf">Syllabus</a></nav>
+  </div>
+</header>
+<main>
+
+<div class="wide">
+  <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week1.html">Week 1</a> / Problem 1</div>
+  <div class="problem-shell">
+    <article>
+      <div class="problem-meta"><span>conceptual + short derivation</span><span>Week 1</span><span>selected assignment</span></div>
+      <div class="prereq">
+        <div class="prereq-col">
+          <strong>Concepts you need</strong>
+          <ul>
+            <li>Empirical distributions and Dirac deltas</li>
+            <li>Pushforward of a distribution through a map</li>
+            <li>Gaussian mixtures and softmax-style weights (for the smoothing part)</li>
+            <li>Group actions, and the difference between invariance and equivariance</li>
+            <li>Cartesian vs fractional coordinates for periodic cells</li>
+          </ul>
+        </div>
+        <div class="prereq-col">
+          <strong>If you get stuck</strong>
+          <ul>
+            <li><a href="https://diffusion.csail.mit.edu/2026/docs/lecture_notes.pdf" target="_blank" rel="noopener">MIT notes, Section 1.3</a> for generation as sampling from a data distribution</li>
+            <li><a href="https://dmol.pub/dl/data.html" target="_blank" rel="noopener">DMol Chapter 9</a> for how molecules become tensors (atom order, coordinates, graphs)</li>
+            <li><a href="https://dmol.pub/dl/Equivariant.html" target="_blank" rel="noopener">DMol Chapter 10</a> for precise invariance and equivariance definitions, with the transformation laws written out</li>
+          </ul>
+        </div>
+      </div>
+      <div class="source-note"><strong>Source note.</strong> Original problem, with framing from <a href="https://diffusion.csail.mit.edu/2026/docs/lecture_notes.pdf" target="_blank" rel="noopener">MIT notes Sections 1.3 and 2.1</a> and <a href="https://dmol.pub/dl/data.html" target="_blank" rel="noopener">DMol Chapters 9</a>, <a href="https://dmol.pub/dl/Equivariant.html" target="_blank" rel="noopener">10</a>, and <a href="https://dmol.pub/dl/flows.html" target="_blank" rel="noopener">15</a>.</div>
+      
+<p>This first problem is meant to slow down the phrase "the data distribution." In images, the representation is often treated as a vector by default. In molecules and materials, the representation already encodes choices about atom order, coordinates, periodicity, chemical identity, and physical symmetry.</p>
+<div class="eqblock">\[
+\widehat p_{\mathrm{data}} = \frac{1}{N}\sum_{i=1}^{N}\delta_{z_i},
+\qquad X_0\sim p_0,
+\qquad X_1 = \psi_{0,1}(X_0).
+\]</div>
+<p>Here \(z_i\) is a molecule, conformer, crystal, or other scientific object after choosing a representation, and \(\psi_{0,1}\) is a generative map from a simple base distribution to the target distribution.</p>
+<figure class="fig"><img src="../../assets/figures/w1p1.png" alt="Smoothed empirical density with its score field, and two equivalent labelings of benzene" loading="lazy" /><figcaption>On the left, a smoothed empirical density and its score field, which points toward the data with softmax weights (part 2). On the right, two of the 518,400 atom labelings that describe the same benzene molecule (part 5).</figcaption></figure>
+<ol class="parts">
+<li>Explain why \(\widehat p_{\mathrm{data}}\) is not a smooth density on \(\mathbb R^d\). What becomes ill-defined if we try to compute \(\nabla_z \log \widehat p_{\mathrm{data}}(z)\) directly?</li>
+<li>One standard fix is to smooth. Define \(q_\sigma = \widehat p_{\mathrm{data}} * \mathcal N(0,\sigma^2 I)\). Write \(q_\sigma\) explicitly as a mixture of Gaussians and show that
+\[
+\nabla_z \log q_\sigma(z) = \frac{1}{\sigma^2}\sum_{i=1}^{N} w_i(z)\,(z_i - z),
+\qquad
+w_i(z) = \frac{\exp\!\left(-\|z-z_i\|^2/2\sigma^2\right)}{\sum_j \exp\!\left(-\|z-z_j\|^2/2\sigma^2\right)}.
+\]
+Interpret the result. Where does the score point, and what happens as \(\sigma\to 0\) and \(\sigma\to\infty\)? Keep this formula, since it returns in Week 2 as the denoising score matching target.</li>
+<li>Write the mathematical statement that the generated distribution matches the data distribution using pushforward notation. Use \((\psi_{0,1})_{\#}p_0\) in your answer.</li>
+<li>For a molecular configuration \(R=(r_1,\ldots,r_n)\in\mathbb R^{3n}\), state the desired transformation law for a coordinate velocity field under translations, rotations, and permutations of identical atoms.</li>
+<li>Count the redundancy that permutation symmetry creates. For benzene, with six carbons and six hydrogens treated as two classes of identical atoms, how many distinct points of \(\mathbb R^{36}\) describe the same physical molecule under atom relabeling alone? What does this number imply for a model that must assign equal density to every copy, and what are the two standard responses?</li>
+<li>Suppose the density is invariant under a group action \(g\), so \(p(gR)=p(R)\). What transformation law should you expect for a score field \(s(R)=\nabla_R\log p(R)\)? What about a velocity field \(u_t(R)\)?</li>
+<li>Give a minimal representation for a periodic crystal that includes atom types, fractional coordinates, and the unit cell. Explain why fractional coordinates are often cleaner than Cartesian coordinates when the lattice is changing.</li>
+</ol>
+<div class="why"><strong>Why this matters.</strong> This problem makes the class confront the gap between clean \(\mathbb R^d\) theory and scientific data. That gap is exactly where equivariant networks, periodic coordinates, graph structure, and chemically meaningful constraints enter.</div>
+
+      <div class="pager"><a href="../week1.html">← Week 1 overview</a><a href="problem-2.html">Problem 2: Analytic flow maps and the continuity equation →</a></div>
+    </article>
+    <aside class="problem-nav" aria-label="Week 1 problem navigation">
+      <a href="notes.html">Lecture notes</a>
+      <strong>Week 1 problems</strong>
+      <a class="current" href="problem-1.html">Problem 1: Data distributions, representations, and physical symmetries</a><a href="problem-2.html">Problem 2: Analytic flow maps and the continuity equation</a><a href="problem-3.html">Problem 3: Change of variables and continuous log-likelihoods</a><a href="problem-4.html">Problem 4: Coding lab: build a probability-flow sandbox</a><a href="problem-5.html">Problem 5: Coding lab: learn a vector field from Gaussian to two moons</a><a href="problem-6.html">Problem 6: Coding lab: symmetry and periodicity sanity checks</a>
+    </aside>
+  </div>
+</div>
+
+</main>
+<footer>
+  <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes remain the primary source material.</div>
+</footer>
+</body>
+</html>

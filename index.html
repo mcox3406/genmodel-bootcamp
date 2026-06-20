@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Generative Modeling for Molecules and Materials</title>
+  <meta name="description" content="SOTA-first generative modeling bootcamp for molecules and materials." />
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<nav class="topbar">
+  <div class="wide">
+    <a class="brand" href="index.html">GenModel Bootcamp</a>
+    <nav class="navlinks" aria-label="Site">
+      <a href="index.html" class="active">Overview</a>
+      <a href="docs/syllabus.pdf">Syllabus</a>
+    </nav>
+    <nav class="weekstrip" aria-label="Weeks">
+      <span class="weekstrip-label">Week</span>
+      <a href="weeks/week1.html">1</a><a href="weeks/week2.html">2</a><a href="weeks/week3.html">3</a><a href="weeks/week4.html">4</a><a href="weeks/week5.html">5</a><a href="weeks/week6.html">6</a><a href="weeks/week7.html">7</a><a href="weeks/week8.html">8</a><a href="weeks/week9.html">9</a><a href="weeks/week10.html">10</a><a href="weeks/week11.html">11</a><a href="weeks/week12.html">12</a>
+    </nav>
+  </div>
+</nav>
+<header class="page">
+  <div class="wrap">
+    <div class="kicker">SOTA-first bootcamp</div>
+    <h1 class="title">Generative Modeling for Molecules and Materials</h1>
+    <p class="authors">AI4Chemistry and materials science reading, derivation, and coding group</p>
+    <nav class="actions" aria-label="Resources"><a class="action primary" href="weeks/week1.html">Start with Week 1</a><a class="action" href="docs/syllabus.pdf">Full syllabus</a></nav>
+  </div>
+</header>
+<main>
+
+<div class="wide">
+  <figure class="overview-fig" id="overview-fig" aria-label="Animation of a cloud of Gaussian noise particles flowing into a crystal lattice and a molecule, then dissolving and reforming.">
+    <canvas></canvas>
+    <figcaption>Every week comes back to the same move. Learn to transport a distribution you can already sample, here Gaussian noise, into structured matter such as crystals and molecules. The methods differ in the path they take and in how that path is learned.</figcaption>
+    <noscript><p class="pg-caption" style="text-align:center">This overview is an animation. With JavaScript enabled it shows noise being transported into structured matter.</p></noscript>
+  </figure>
+</div>
+
+<div class="wrap">
+<section>
+  <h2><span class="num">1</span>Course premise</h2>
+  <blockquote class="note"><p>This is a SOTA-first bootcamp. We assume participants know the high-level story of diffusion and flow matching. The course uses two weeks of compressed foundations to make current papers readable, then moves into fast generation, discrete and hybrid spaces, guidance, Schrodinger bridges, molecules, proteins, crystals, and evaluation.</p></blockquote>
+  <p class="lede">Five questions recur throughout. What is the state space, what dynamics are learned, what symmetries matter, what evaluator defines success, and what failure modes can fool us?</p>
+</section>
+<section>
+  <h2><span class="num">2</span>Learning arc</h2>
+  <ol class="pipeline"><li><span class="phase-name">Foundations</span><span class="phase-desc">Two weeks to align on transport, diffusion, scores, flow maps, likelihoods, and scientific state spaces.</span></li><li><span class="phase-name">Modern methods</span><span class="phase-desc">Flow matching at scale, stochastic interpolants, couplings, one-step and few-step generation, and hybrid discrete models.</span></li><li><span class="phase-name">Scientific inverse design</span><span class="phase-desc">Guidance, alignment, Schrodinger bridges, molecular and protein generation, crystal generation, and failure-mode analysis.</span></li></ol>
+</section>
+<section>
+  <h2><span class="num">3</span>Weeks</h2>
+
+  <div class="weekgroup">
+    <div class="weekgroup-label">Foundations · weeks 1–2</div>
+    <ol class="weeklist">
+      <li><a href="weeks/week1.html"><span class="wk-num">01</span><span><span class="wk-title">Probability transport, flow maps, and scientific state spaces</span><span class="wk-desc">ODE transport, flow maps, and continuity equations set the common language, then we ask what changes when the objects are molecules, proteins, and crystals.</span></span><span class="wk-tag">6 problems</span></a></li>
+      <li><a href="weeks/week2.html"><span class="wk-num">02</span><span><span class="wk-title">Diffusion, score models, and modern design space</span><span class="wk-desc">DDPMs, score SDEs, probability-flow ODEs, denoising score matching, and sampler design compressed into one design-space view.</span></span><span class="wk-tag">guide</span></a></li>
+    </ol>
+  </div>
+
+  <div class="weekgroup">
+    <div class="weekgroup-label">Modern methods · weeks 3–7</div>
+    <ol class="weeklist">
+      <li><a href="weeks/week3.html"><span class="wk-num">03</span><span><span class="wk-title">Flow matching, rectified flows, and scalable transformer generators</span><span class="wk-desc">From CFM identities to the models that made flow matching a SOTA technology at scale.</span></span><span class="wk-tag">guide</span></a></li>
+      <li><a href="weeks/week4.html"><span class="wk-num">04</span><span><span class="wk-title">Stochastic interpolants as the unifying language</span><span class="wk-desc">One language for deterministic flows, stochastic samplers, score objectives, and bridge-like constructions.</span></span><span class="wk-tag">guide</span></a></li>
+      <li><a href="weeks/week5.html"><span class="wk-num">05</span><span><span class="wk-title">Couplings, optimal transport, and data-dependent bases</span><span class="wk-desc">How couplings determine path crossing, stiffness, curvature, and how much capacity is wasted moving noise into scientific structures.</span></span><span class="wk-tag">guide</span></a></li>
+      <li><a href="weeks/week6.html"><span class="wk-num">06</span><span><span class="wk-title">One-step and few-step generation</span><span class="wk-desc">A frontier week. Can we sample well in one to eight function evaluations without fragile distillation?</span></span><span class="wk-tag">guide</span></a></li>
+      <li><a href="weeks/week7.html"><span class="wk-num">07</span><span><span class="wk-title">Discrete, categorical, and hybrid continuous-discrete generation</span><span class="wk-desc">Scientific objects are mixed, combining continuous coordinates, categorical atom types, discrete bonds, integer compositions, sequences, and text.</span></span><span class="wk-tag">guide</span></a></li>
+    </ol>
+  </div>
+
+  <div class="weekgroup">
+    <div class="weekgroup-label">Scientific inverse design · weeks 8–12</div>
+    <ol class="weeklist">
+      <li><a href="weeks/week8.html"><span class="wk-num">08</span><span><span class="wk-title">Guidance, alignment, and inverse design</span><span class="wk-desc">The scientific target is rarely unconditional generation. It is usually a reward-tilted, property-conditioned, or Pareto-constrained distribution.</span></span><span class="wk-tag">guide</span></a></li>
+      <li><a href="weeks/week9.html"><span class="wk-num">09</span><span><span class="wk-title">Schrodinger bridges, stochastic control, and ensemble translation</span><span class="wk-desc">Natural when both endpoints are meaningful distributions, such as unrelaxed to relaxed ensembles or low- to high-fidelity structures.</span></span><span class="wk-tag">guide</span></a></li>
+      <li><a href="weeks/week10.html"><span class="wk-num">10</span><span><span class="wk-title">Molecular, protein, and biomolecular generative SOTA</span><span class="wk-desc">A comparative application week on small molecules, conformers, ligands, proteins, and biomolecular complexes.</span></span><span class="wk-tag">guide</span></a></li>
+      <li><a href="weeks/week11.html"><span class="wk-num">11</span><span><span class="wk-title">Crystalline materials generative SOTA</span><span class="wk-desc">The materials-design centerpiece, spanning composition, lattice, fractional coordinates, space group, stability, novelty, and property control.</span></span><span class="wk-tag">guide</span></a></li>
+      <li><a href="weeks/week12.html"><span class="wk-num">12</span><span><span class="wk-title">Failure modes, evaluation, and research project design</span><span class="wk-desc">What makes a generated molecule or material scientifically useful rather than merely valid?</span></span><span class="wk-tag">guide</span></a></li>
+    </ol>
+  </div>
+</section>
+<section>
+  <h2><span class="num">4</span>Core texts</h2>
+  <p>The site links out liberally. The goal is to guide a reading group, not to recreate a textbook.</p>
+  <div class="reading-grid">
+    <div class="reading-card"><h3>Fast review</h3><p><a href="https://diffusion.csail.mit.edu/2026/docs/lecture_notes.pdf" target="_blank" rel="noopener">MIT notes</a> for ODE/SDE generation, flow matching, scores, guidance, large-scale generators, and discrete diffusion.</p></div>
+    <div class="reading-card"><h3>Unifying theory</h3><p><a href="https://arxiv.org/abs/2303.08797" target="_blank" rel="noopener">Stochastic Interpolants</a> for the flow and diffusion bridge, and <a href="https://arxiv.org/abs/2603.18992" target="_blank" rel="noopener">Schrodinger Bridges Foundations</a> for path-space OT and stochastic control.</p></div>
+    <div class="reading-card"><h3>Scientific representation</h3><p><a href="https://dmol.pub/" target="_blank" rel="noopener">DMol</a> for molecular graphs, equivariance, normalizing flows, and modern molecular neural networks.</p></div>
+  </div>
+</section>
+</div>
+
+</main>
+<footer>
+  <div class="wrap">SOTA-first generative modeling bootcamp. Built as a lightweight course site, not a standalone textbook.</div>
+</footer>
+<script src="assets/overview.js" defer></script>
+</body>
+</html>

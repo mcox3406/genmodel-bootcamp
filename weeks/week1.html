@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 1: Probability transport, flow maps, and scientific state spaces</title>
+  <meta name="description" content="Generation as sampling, ODE flows, flow maps, the continuity equation, CNFs, and why geometry matters for molecules and materials." />
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)'], ['$', '$']],
+      displayMath: [['\\[', '\\]']]
+    },
+    svg: { fontCache: 'global' }
+  };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+<body>
+<nav class="topbar">
+  <div class="wide">
+    <a class="brand" href="../index.html">GenModel Bootcamp</a>
+    <nav class="navlinks" aria-label="Site">
+      <a href="../index.html">Overview</a>
+      <a href="../docs/syllabus.pdf">Syllabus</a>
+    </nav>
+    <nav class="weekstrip" aria-label="Weeks">
+      <span class="weekstrip-label">Week</span>
+      <a href="week1.html" class="active">1</a><a href="week2.html">2</a><a href="week3.html">3</a><a href="week4.html">4</a><a href="week5.html">5</a><a href="week6.html">6</a><a href="week7.html">7</a><a href="week8.html">8</a><a href="week9.html">9</a><a href="week10.html">10</a><a href="week11.html">11</a><a href="week12.html">12</a>
+    </nav>
+  </div>
+</nav>
+
+<header class="page">
+  <div class="wrap">
+    <div class="kicker">Week 1 of 12 · foundations</div>
+    <h1 class="title">Probability transport, flow maps, and scientific state spaces</h1>
+    <p class="subtitle">Start with the cleanest possible object, an ODE flow map that pushes a simple distribution toward data.</p>
+    <div class="meta"><span>methods + applications</span><span>derivation session</span><span>coding lab</span><span>6 problems</span></div>
+    <nav class="actions" aria-label="Week navigation">
+      <a class="action primary" href="week1/notes.html">Lecture notes</a>
+      <a class="action" href="#problems">Jump to problems</a>
+      <a class="action" href="week2.html">Week 2 →</a>
+    </nav>
+  </div>
+</header>
+<main>
+  <div class="wide page-layout">
+    <article>
+      <section id="orientation">
+        <h2><span class="num">1</span>Orientation</h2>
+        <p class="lede">Generation as sampling, ODE flows, flow maps, the continuity equation, continuous normalizing flows, and why geometry matters once the objects are molecules and materials.</p>
+        <figure class="fig"><img src="../assets/figures/w1-overview.png" alt="Three panels showing a velocity field as streamlines, the same field's flow map warping a square grid, and a Gaussian density transported into a sheared crescent." loading="lazy" /><figcaption>The three objects that carry the week, all from one velocity field. The field \(u_t\) (left) integrates into the flow map \(\psi_{0,1}\), a diffeomorphism that warps space (center, gray grid to red). As the flow moves points it transports probability mass. The base density \(p_0\) is pushed forward to \(p_1\) (right), an evolution governed by the continuity equation.</figcaption></figure>
+        <p>Almost every model in this course shares a single skeleton. Pick a distribution you can already sample from, usually a standard Gaussian, and learn a time-dependent transformation that carries it onto the data distribution. Diffusion, flow matching, stochastic interpolants, and Schrodinger bridges all vary the same move. They differ in the path taken between the two distributions, in whether that path is deterministic or noisy, and in the objective used to learn it. Week 1 studies the cleanest instance of the skeleton, a deterministic flow defined by an ordinary differential equation, with none of the stochasticity or large-scale machinery layered on yet. Working through this case first is what makes the later papers easy to follow.</p>
+        <p>Three objects carry the week, and you should be able to move between them comfortably by the end. The <strong>velocity field</strong> \(u_t(x)\) gives a vector at every point and time, and it is the object a neural network eventually learns. Its time integral is the <strong>flow map</strong> \(\psi_{s,t}\), a smooth, invertible warp of space (a diffeomorphism) that says where each point ends up. As the flow carries points, it also carries probability mass. The <strong>pushforward</strong> of the base distribution evolves by the <strong>continuity equation</strong>, the same conservation law that governs a compressible fluid. Two of the course's organizing questions get their first answers here. The dynamics being learned are a velocity field, and the state space, simple for now, turns nontrivial in the second half of the week.</p>
+        <p>This is why chemistry and materials enter in week one rather than later. A generic vector in \(\mathbb R^d\) hides the choices baked into a scientific representation, including atom ordering, the coordinate frame, which transformations leave a molecule physically unchanged, and the periodicity of a crystal lattice. A faithful generative model has to respect translation, rotation, and permutation symmetry, and treat a periodic cell as periodic. Meeting that requirement now, while the math is still just flows on \(\mathbb R^2\), motivates the equivariant networks, fractional coordinates, and lattice variables that dominate the second half of the course.</p>
+        <div class="note"><p>This week is deliberately pre-diffusion. The goal is to make vector fields, flows, pushforwards, and density evolution concrete <em>before</em> stochasticity, score functions, and denoising objectives arrive in Week 2. By the end, the continuity equation and the change-of-variables identity should feel routine. The rest of the course assumes them.</p></div>
+      </section>
+      <section id="goals">
+        <h2><span class="num">2</span>Learning goals</h2>
+        <ul><li>Translate “generate a molecule/material” into sampling from a target probability distribution.</li><li>Define a time-dependent vector field, its flow map, and the induced pushforward of a distribution.</li><li>Derive the continuity equation and the instantaneous change-of-variables formula for CNFs.</li><li>Recognize where exact likelihood, invertibility, and geometric constraints help or hurt in chemistry/materials applications.</li></ul>
+      </section>
+      <section id="readings">
+        <h2><span class="num">3</span>Methods readings</h2>
+        <p>Read in order, these four papers trace one idea, turning a simple distribution into data by transport, from its origin to the form the rest of the course relies on. Normalizing flows learn an exact density by composing invertible maps. Neural ODEs replace that discrete stack with a continuous-depth differential equation, which is the flow you study this week. FFJORD makes the continuous version scale. The stochastic-interpolant paper then trades maximum likelihood for simple regression, the basis of flow matching and what follows it. The MIT notes fix the notation and tie the four together. Aim to reproduce the central derivations and place each framework on this arc, rather than to memorize every result. The <a href="week1/notes.html">lecture notes</a> distill all of this into one place, with figures and a companion notebook.</p>
+        <div class="reading-list">
+        <div class="reading">
+          <span class="label">Core notes</span>
+          <div class="title"><a href="https://diffusion.csail.mit.edu/2026/docs/lecture_notes.pdf" target="_blank" rel="noopener">Holderrieth &amp; Erives, An Introduction to Flow Matching and Diffusion Models (MIT 6.S184), Sections 1 and 2.1</a></div>
+          <p class="desc">The single source of notation for the course. Section 1 builds generation as sampling from a data distribution. Section 2.1 defines flow models, the flow as a diffeomorphism that warps space, Euler and Heun simulation, and the neural velocity field. Stop before Section 2.2, since diffusion is next week. Aim to state exactly what a flow model is and how you draw a sample from one.</p>
+        </div>
+        <div class="reading">
+          <span class="label">Foundations · 2015</span>
+          <div class="title"><a href="https://arxiv.org/abs/1505.05770" target="_blank" rel="noopener">Rezende &amp; Mohamed, Variational Inference with Normalizing Flows</a></div>
+          <p class="desc">The paper that made normalizing flows standard. Its bargain is the one to remember. Compose invertible maps, track the log-determinant of each Jacobian, and you get exact likelihoods, at the price of architectures engineered to keep that determinant cheap. Every later question about avoiding that Jacobian, including this week's, starts here.</p>
+        </div>
+        <div class="reading">
+          <span class="label">The hinge · 2018</span>
+          <div class="title"><a href="https://arxiv.org/abs/1806.07366" target="_blank" rel="noopener">Chen et al., Neural Ordinary Differential Equations</a></div>
+          <p class="desc">The conceptual turn of the week. A deep residual network becomes a continuous-depth ODE in the limit of infinitely many small steps, so the flow map you solve by hand in Problem 2 is the same object the network integrates. Depth becomes a continuous time variable rather than a layer count. Also introduces the adjoint method for differentiating through a solver.</p>
+        </div>
+        <div class="reading">
+          <span class="label">Making it scale · 2018</span>
+          <div class="title"><a href="https://arxiv.org/abs/1810.01367" target="_blank" rel="noopener">Grathwohl et al., FFJORD: Free-form Continuous Dynamics for Scalable Reversible Generative Models</a></div>
+          <p class="desc">How continuous flows became practical. Tracking the exact log-density along a trajectory needs the divergence of the velocity field, the trace of its Jacobian, which is costly in high dimensions. FFJORD estimates it with the Hutchinson trace estimator you prove in Problem 3. Read it for the engineering that turns a clean identity into something trainable, and for why it lifts the architectural constraints earlier flows depended on.</p>
+        </div>
+        <div class="reading">
+          <span class="label">Optional · 2022</span>
+          <div class="title"><a href="https://arxiv.org/abs/2209.15571" target="_blank" rel="noopener">Albergo &amp; Vanden-Eijnden, Building Normalizing Flows with Stochastic Interpolants</a></div>
+          <p class="desc">A preview of the approach later weeks adopt. Rather than maximize likelihood by backpropagating through an ODE solver, define a path that connects base and data in finite time and regress the velocity directly against it with a simple quadratic loss. Problem 5 is a hands-on first taste. Flow matching (Week 3) and stochastic interpolants (Week 4) are the full theory.</p>
+        </div>
+        </div>
+      </section>
+      <section id="applications">
+        <h2><span class="num">4</span>Chemistry / materials application readings</h2>
+        <p>These readings test the clean theory against real scientific representations. Boltzmann Generators apply invertible flows to a genuine physics problem, sampling equilibrium states of a molecular system and estimating free energies. GraphAF adapts flow ideas to molecular graphs, where discrete bonds and valence rules sit awkwardly inside a continuous invertible model. E(n) Equivariant Normalizing Flows points ahead to the geometry-aware generators of Week 10. Carry one question through all three. Where does an exact, invertible flow on a vector help, and where does the structure of the object get in the way?</p>
+        <div class="reading-list">
+        <div class="reading">
+          <span class="label">Physical sampling</span>
+          <div class="title"><a href="https://www.science.org/doi/10.1126/science.aaw1147" target="_blank" rel="noopener">Noé et al., Boltzmann Generators: Sampling Equilibrium States of Many-Body Systems with Deep Learning</a></div>
+          <p class="desc">Invertible flows applied to equilibrium sampling and free-energy estimation, a high-impact result in the physical sciences.</p>
+        </div>
+        <div class="reading">
+          <span class="label">Molecular graphs</span>
+          <div class="title"><a href="https://arxiv.org/abs/2001.09382" target="_blank" rel="noopener">Shi et al., GraphAF: A Flow-based Autoregressive Model for Molecular Graph Generation</a></div>
+          <p class="desc">One representative of flow-based molecular graph generation. Worth reading for how discrete bonds and valence rules are forced to coexist with a continuous invertible model, and why generating atoms one at a time with validity checks turns out to help.</p>
+        </div>
+        <div class="reading">
+          <span class="label">Geometry preview</span>
+          <div class="title"><a href="https://arxiv.org/abs/2105.09016" target="_blank" rel="noopener">Satorras et al., E(n) Equivariant Normalizing Flows</a></div>
+          <p class="desc">Optional bridge toward equivariant 3D generative models.</p>
+        </div>
+        </div>
+      </section>
+      <section id="problems">
+        <h2><span class="num">5</span>Problems</h2>
+        <p>Six compact problems. Three derivation and concept checks, then three coding labs, each on its own page with full statements.</p>
+        <ol class="problem-list">
+          <li><a href="week1/problem-1.html"><span><span class="p-title">Data distributions, representations, and physical symmetries</span></span><span class="p-kind">conceptual + derivation</span></a></li>
+          <li><a href="week1/problem-2.html"><span><span class="p-title">Analytic flow maps and the continuity equation</span></span><span class="p-kind">derivation</span></a></li>
+          <li><a href="week1/problem-3.html"><span><span class="p-title">Change of variables and continuous log-likelihoods</span></span><span class="p-kind">derivation + sketch</span></a></li>
+          <li><a href="week1/problem-4.html"><span><span class="p-title">Coding lab: build a probability-flow sandbox</span></span><span class="p-kind">coding</span></a></li>
+          <li><a href="week1/problem-5.html"><span><span class="p-title">Coding lab: learn a vector field from Gaussian to two moons</span></span><span class="p-kind">coding + flow matching</span></a></li>
+          <li><a href="week1/problem-6.html"><span><span class="p-title">Coding lab: symmetry and periodicity sanity checks</span></span><span class="p-kind">coding + geometry</span></a></li>
+        </ol>
+        <h3>Discussion prompts</h3>
+        <ul><li>What do exact likelihood and invertibility buy us, and where do they become awkward for molecular graphs or periodic crystals?</li><li>In a ChE / statistical mechanics language, what is the analogy between a learned transport map and a coordinate transformation for sampling?</li><li>How should we treat symmetries, whether by architecture, data augmentation, constraints, or postprocessing?</li></ul>
+      </section>
+      <section id="next">
+        <h2><span class="num">6</span>Connection to the next module</h2>
+        <p>Most of this week survives into the next one. The transport skeleton, the velocity field, the continuity equation, and step-by-step simulation all carry over unchanged. Week 2 keeps the differential-equation view and adds one ingredient, stochasticity. A Brownian forward process now noises the data, and the model learns to reverse it.</p>
+        <p>What gets replaced is the workhorse. This week's engine is exact likelihood through invertible maps, which Problem 1 already shows is fragile, since the empirical data distribution has no usable gradient. The fix introduced there, smoothing the empirical measure with a Gaussian and reading off its score, carries directly into Week 2. That smoothed score is the denoising score matching target, and learning it avoids the likelihood machinery entirely. Problem 2's time-reversal identity returns as well. Reversing a deterministic flow only flips the sign of the velocity, but reversing a stochastic process needs a correction term, and that term is exactly the score just described. Both points are set up deliberately this week so that Week 2 can build on them directly.</p>
+      </section>
+      <div class="nextprev">
+        <a href="../index.html">← Course overview</a>
+        <a href="week2.html">Week 2: Diffusion, score models, and modern design space →</a>
+      </div>
+    </article>
+    <aside class="side" aria-label="Page contents">
+      <div class="side-title">On this page</div>
+      <a href="week1/notes.html">Lecture notes →</a>
+      <a href="#orientation">Orientation</a>
+      <a href="#goals">Learning goals</a>
+      <a href="#readings">Methods readings</a>
+      <a href="#applications">Application readings</a>
+      <a href="#problems">Problems</a>
+      <a href="#next">Next connection</a>
+    </aside>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">Built as a lightweight course site. Source pages are intentionally short and link out to papers, notes, and code.</div>
+</footer>
+</body>
+</html>

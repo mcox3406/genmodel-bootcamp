@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 1 Problem 4 - Generative Modeling Bootcamp</title>
+  <meta name="description" content="Write reusable code for particles, flow maps, numerical solvers, warped grids, and log-density tracking." />
+  <link rel="stylesheet" href="../../assets/style.css" />
+  
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(', '\\)'], ['$', '$']],
+    displayMath: [['\\[', '\\]']]
+  },
+  svg: { fontCache: 'global' }
+};
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="wide">
+    <a class="brand" href="../../index.html">GenModel Bootcamp</a>
+    <nav class="navlinks" aria-label="Site">
+      <a href="../../index.html">Overview</a>
+      <a href="../../docs/syllabus.pdf">Syllabus</a>
+    </nav>
+    <nav class="weekstrip" aria-label="Weeks">
+      <span class="weekstrip-label">Week</span>
+      <a href="../week1.html" class="active">1</a><a href="../week2.html">2</a><a href="../week3.html">3</a><a href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
+    </nav>
+  </div>
+</nav>
+
+<header class="page">
+  <div class="wrap">
+    <div class="kicker">Week 1 · Problem 4 of 6</div>
+    <h1 class="title">Coding lab: build a probability-flow sandbox</h1>
+    <p class="subtitle">Write reusable code for particles, flow maps, numerical solvers, warped grids, and log-density tracking.</p>
+    <nav class="actions" aria-label="Problem navigation"><a class="action" href="../week1.html">Week 1 overview</a><a class="action" href="../../docs/syllabus.pdf">Syllabus</a></nav>
+  </div>
+</header>
+<main>
+
+<div class="wide">
+  <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week1.html">Week 1</a> / Problem 4</div>
+  <div class="problem-shell">
+    <article>
+      <div class="problem-meta"><span>coding</span><span>Week 1</span><span>selected assignment</span></div>
+      <div class="prereq">
+        <div class="prereq-col">
+          <strong>Concepts you need</strong>
+          <ul>
+            <li>The analytic flow maps from Problem 2 (they are the ground truth for part 4)</li>
+            <li>Euler, Heun, and RK4 stepping, and what order of accuracy means</li>
+            <li>The log-density identity from Problem 3, part 5</li>
+            <li>Vectorized NumPy and basic Matplotlib</li>
+          </ul>
+        </div>
+        <div class="prereq-col">
+          <strong>If you get stuck</strong>
+          <ul>
+            <li>Problems 2 and 3: this lab implements exactly what you derived there, so mismatches usually mean the derivation and the code disagree</li>
+            <li><a href="https://diffusion.csail.mit.edu/2026/docs/lecture_notes.pdf" target="_blank" rel="noopener">MIT notes, Section 2.1</a> for the simulation viewpoint on flow models</li>
+            <li><a href="https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods" target="_blank" rel="noopener">Runge-Kutta methods</a> for the Heun and RK4 update rules and their error orders</li>
+            <li><a href="https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.streamplot.html" target="_blank" rel="noopener">matplotlib streamplot</a> for the divergence heatmap overlay</li>
+          </ul>
+        </div>
+      </div>
+      <div class="source-note"><strong>Source note.</strong> Original lab designed to operationalize <a href="https://diffusion.csail.mit.edu/2026/docs/lecture_notes.pdf" target="_blank" rel="noopener">MIT notes Section 2.1</a> and the CNF log-density identity from <a href="https://arxiv.org/abs/1806.07366" target="_blank" rel="noopener">Neural ODEs</a> and <a href="https://arxiv.org/abs/1810.01367" target="_blank" rel="noopener">FFJORD</a>.</div>
+      
+<p>This lab builds the small code scaffold that later weeks can reuse. The point is not to build a library. The point is to make every object in the Week 1 theory visible, from particles and trajectories to flow maps, divergence, density, and solver error.</p>
+<p>Start with four velocity fields in \(\mathbb R^2\):</p>
+<div class="eqblock">\[
+u_1(x)=-\theta x,\qquad
+u_2(x)=c,\qquad
+u_3(x)=\begin{pmatrix}-x_2\\x_1\end{pmatrix},\qquad
+u_4(x)=\alpha\begin{pmatrix}-x_2\\x_1\end{pmatrix}\exp(-\|x\|^2).
+\]</div>
+<figure class="fig"><img src="../../assets/figures/w1p4.png" alt="Streamline plots of the four velocity fields used in the lab" loading="lazy" /><figcaption>The four velocity fields as streamlines, namely contraction, constant drift, rigid rotation, and the localized swirl. Your job is to set them in motion with particles, grids, densities, and solver error.</figcaption></figure>
+<div class="playground" id="flow-playground">
+  <noscript><p style="padding:12px">The interactive demo requires JavaScript. The static figure above shows the same fields.</p></noscript>
+</div>
+<p class="pg-caption">A live target for this lab. 1,600 particles from \(\mathcal N(0,I_2)\), advected by each field with a Heun integrator. Switch fields mid-flight and watch the same cloud compress, drift, rotate, stir, and (for the double well) split into two metastable populations. Your sandbox should be able to reproduce every one of these behaviors, plus the densities and error curves the demo does not show.</p>
+<p>Implement a small set of functions with clean interfaces.</p>
+<pre class="code">sample_base(n, d, kind="gaussian")
+velocity_field(x, t, kind, params)
+integrate_ode(x0, ts, velocity_fn, method="euler")
+track_log_density(x0, logp0, ts, velocity_fn, divergence_fn)
+plot_particles(samples, title)
+plot_warped_grid(grid, title)</pre>
+<ol class="parts">
+<li>Draw \(10^4\) samples from \(\mathcal N(0,I_2)\). Simulate all four fields from \(t=0\) to \(t=1\). Plot particles at \(t=0,0.25,0.5,1\), arranged as a filmstrip with one row per field. Optional but encouraged, render the evolution as an animation. Watching the swirl field stir the Gaussian while the contraction collapses it builds more intuition than any derivation.</li>
+<li>Create a square grid in \([-3,3]^2\), push it through the same flows, and plot the warped grids. Use the grid plot to explain compression, expansion, and local rotation.</li>
+<li>Plot \(\nabla\cdot u(x)\) as a heatmap over \([-3,3]^2\) for each field, with streamlines overlaid. Using the heatmap alone, predict where particle density will rise and where it will fall, then check the prediction against your filmstrip from part 1. The continuity equation is precisely the statement that these two pictures agree.</li>
+<li>Implement Euler, Heun, and RK4. For contraction and rotation, compare final numerical error against the analytic solution for step counts \(N\in\{4,8,16,32,64,128\}\) on a log-log plot, and fit the slope for each method. You should be able to read the order of each integrator (1, 2, and 4) directly off the plot. Explain any regime where the measured slope deviates.</li>
+<li>For the contraction field, integrate
+\[
+\frac{d}{dt}\log p_t(X_t)=-\nabla\cdot u(X_t)
+\]
+and compare the result to the analytic transformed Gaussian density.</li>
+<li>Chemistry-flavored extension (optional). Take the double-well potential \(V(x) = (x_1^2-1)^2 + x_2^2\) and integrate the relaxation field \(u_5(x) = -\nabla V(x)\). Watch the standard normal split into two metastable populations and report the fraction of mass that lands in each well. This is the simplest picture of what a molecular energy landscape does to transported probability, and it previews why multimodality haunts every later week.</li>
+<li>Write a brief interpretation of where the numerical solver succeeds and fails. Mention trajectories, flow map, divergence, density, and base distribution.</li>
+</ol>
+<div class="deliverable"><strong>Deliverable.</strong> A short notebook producing the particle filmstrip, the warped grids, the divergence heatmaps with streamlines, the log-log convergence plot with measured slopes, and the tracked vs analytic log-density comparison. These plots become the visual vocabulary for the rest of the course. Later weeks reuse this scaffold with learned velocity fields.</div>
+<div class="why"><strong>Why this matters.</strong> The later sampling algorithms will look more sophisticated, but they still rely on this machinery. Solver error, divergence, stiffness, and trajectory geometry never go away.</div>
+
+      <div class="pager"><a href="problem-3.html">← Problem 3: Change of variables and continuous log-likelihoods</a><a href="problem-5.html">Problem 5: Coding lab: learn a vector field from Gaussian to two moons →</a></div>
+    </article>
+    <aside class="problem-nav" aria-label="Week 1 problem navigation">
+      <a href="notes.html">Lecture notes</a>
+      <strong>Week 1 problems</strong>
+      <a href="problem-1.html">Problem 1: Data distributions, representations, and physical symmetries</a><a href="problem-2.html">Problem 2: Analytic flow maps and the continuity equation</a><a href="problem-3.html">Problem 3: Change of variables and continuous log-likelihoods</a><a class="current" href="problem-4.html">Problem 4: Coding lab: build a probability-flow sandbox</a><a href="problem-5.html">Problem 5: Coding lab: learn a vector field from Gaussian to two moons</a><a href="problem-6.html">Problem 6: Coding lab: symmetry and periodicity sanity checks</a>
+    </aside>
+  </div>
+</div>
+
+</main>
+<footer>
+  <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes remain the primary source material.</div>
+</footer>
+<script src="../../assets/playground.js" defer></script>
+</body>
+</html>

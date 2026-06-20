@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 1 Problem 3 - Generative Modeling Bootcamp</title>
+  <meta name="description" content="Connect finite normalizing flows to continuous normalizing flows and see where divergence enters." />
+  <link rel="stylesheet" href="../../assets/style.css" />
+  
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(', '\\)'], ['$', '$']],
+    displayMath: [['\\[', '\\]']]
+  },
+  svg: { fontCache: 'global' }
+};
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="wide">
+    <a class="brand" href="../../index.html">GenModel Bootcamp</a>
+    <nav class="navlinks" aria-label="Site">
+      <a href="../../index.html">Overview</a>
+      <a href="../../docs/syllabus.pdf">Syllabus</a>
+    </nav>
+    <nav class="weekstrip" aria-label="Weeks">
+      <span class="weekstrip-label">Week</span>
+      <a href="../week1.html" class="active">1</a><a href="../week2.html">2</a><a href="../week3.html">3</a><a href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
+    </nav>
+  </div>
+</nav>
+
+<header class="page">
+  <div class="wrap">
+    <div class="kicker">Week 1 · Problem 3 of 6</div>
+    <h1 class="title">Change of variables and continuous log-likelihoods</h1>
+    <p class="subtitle">Connect finite normalizing flows to continuous normalizing flows and see where divergence enters.</p>
+    <nav class="actions" aria-label="Problem navigation"><a class="action" href="../week1.html">Week 1 overview</a><a class="action" href="../../docs/syllabus.pdf">Syllabus</a></nav>
+  </div>
+</header>
+<main>
+
+<div class="wide">
+  <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week1.html">Week 1</a> / Problem 3</div>
+  <div class="problem-shell">
+    <article>
+      <div class="problem-meta"><span>derivation + implementation sketch</span><span>Week 1</span><span>selected assignment</span></div>
+      <div class="prereq">
+        <div class="prereq-col">
+          <strong>Concepts you need</strong>
+          <ul>
+            <li>Change of variables for densities (Jacobian determinant)</li>
+            <li>Determinants of linear and triangular maps</li>
+            <li>The expansion \(\det(I+hA)=1+h\,\mathrm{tr}(A)+O(h^2)\) (for the composition part)</li>
+            <li>The continuity equation from Problem 2, part 4 (used directly in part 5 here)</li>
+            <li>Trace of a matrix and expectations of quadratic forms (for part 6)</li>
+          </ul>
+        </div>
+        <div class="prereq-col">
+          <strong>If you get stuck</strong>
+          <ul>
+            <li><a href="https://dmol.pub/dl/flows.html" target="_blank" rel="noopener">DMol Chapter 15</a> for the change-of-variables formula with worked examples</li>
+            <li><a href="https://arxiv.org/abs/1806.07366" target="_blank" rel="noopener">Neural ODEs, Appendix A</a> for the instantaneous change-of-variables proof if your derivation in part 5 stalls</li>
+            <li><a href="https://arxiv.org/abs/1810.01367" target="_blank" rel="noopener">FFJORD</a> for the Hutchinson trace estimator and why it matters in high dimensions</li>
+          </ul>
+        </div>
+      </div>
+      <div class="source-note"><strong>Source note.</strong> Adapted from <a href="https://dmol.pub/dl/flows.html" target="_blank" rel="noopener">DMol Chapter 15</a>, <a href="https://arxiv.org/abs/1806.07366" target="_blank" rel="noopener">Neural ODEs</a>, and <a href="https://arxiv.org/abs/1810.01367" target="_blank" rel="noopener">FFJORD</a>.</div>
+      
+<p>Normalizing flows learn an invertible map from a simple distribution to a complex one. Continuous normalizing flows replace a stack of invertible layers with an ODE-defined map.</p>
+<figure class="fig"><img src="../../assets/figures/w1p3.png" alt="Euler compositions converging to an exact spiral flow, and the divergence Riemann sum converging to its integral" loading="lazy" /><figcaption>On the left, Euler compositions with K = 5 and K = 20 steps against the exact flow (part 4). On the right, the matching statement for densities, where the Riemann sum of divergence along the trajectory converges to the integral that appears in the CNF likelihood.</figcaption></figure>
+<ol class="parts">
+<li>Let \(Z\sim p_Z\), \(X=f(Z)\), and \(g=f^{-1}\). Derive
+\[
+p_X(x)=p_Z(g(x))\left|\det \nabla g(x)\right|.
+\]</li>
+<li>Apply the formula to \(f(z)=Lz+\mu\), where \(L\) is invertible and \(p_Z=\mathcal N(0,I_d)\). Write \(\log p_X(x)\).</li>
+<li>For the triangular map
+\[
+x_1=z_1, \qquad x_2=z_2+\alpha\tanh(z_1),
+\]
+compute \(\det \nabla f(z)\). Explain why triangular Jacobians are computationally attractive.</li>
+<li>Connect discrete flows to continuous ones. Compose \(K\) Euler steps \(x_{k+1} = x_k + h\,u(x_k,t_k)\) with \(h=1/K\). Using \(\det(I+hA) = 1 + h\,\mathrm{tr}(A) + O(h^2)\), show that
+\[
+\log\left|\det \nabla f\right| = \sum_{k=0}^{K-1} h\,\nabla\cdot u(x_k,t_k) + O(h)
+\;\longrightarrow\; \int_0^1 \nabla\cdot u(x_t,t)\,dt.
+\]
+A continuous normalizing flow is the \(K\to\infty\) limit of a deep residual flow.</li>
+<li>Starting from the continuity equation, show that along a trajectory
+\[
+\frac{d}{dt}\log p_t(X_t)=-\nabla\cdot u_t(X_t).
+\]
+You have now reached the same identity two ways, by composing small steps and by PDE reasoning. Convince yourself they agree, including the sign.</li>
+<li>Write \(\nabla\cdot u_\theta(x,t)\) as a trace. If \(\epsilon\) satisfies \(\mathbb E[\epsilon\epsilon^\top]=I\), prove
+\[
+\mathbb E[\epsilon^\top (\nabla_x u_\theta)\epsilon] = \mathrm{tr}(\nabla_x u_\theta).
+\]
+Why is this useful in high dimensions?</li>
+<li>For molecular equilibrium sampling, explain why exact likelihoods and invertible maps are appealing. Then explain why exact invertibility can also be restrictive for molecules with changing atom types, periodic cells, or multiple disconnected modes.</li>
+</ol>
+<div class="why"><strong>Why this matters.</strong> This problem ties the density-learning view to the sampling view. It also prepares students to understand why modern flow matching often avoids maximum-likelihood CNF training while still keeping the ODE transport picture.</div>
+
+      <div class="pager"><a href="problem-2.html">← Problem 2: Analytic flow maps and the continuity equation</a><a href="problem-4.html">Problem 4: Coding lab: build a probability-flow sandbox →</a></div>
+    </article>
+    <aside class="problem-nav" aria-label="Week 1 problem navigation">
+      <a href="notes.html">Lecture notes</a>
+      <strong>Week 1 problems</strong>
+      <a href="problem-1.html">Problem 1: Data distributions, representations, and physical symmetries</a><a href="problem-2.html">Problem 2: Analytic flow maps and the continuity equation</a><a class="current" href="problem-3.html">Problem 3: Change of variables and continuous log-likelihoods</a><a href="problem-4.html">Problem 4: Coding lab: build a probability-flow sandbox</a><a href="problem-5.html">Problem 5: Coding lab: learn a vector field from Gaussian to two moons</a><a href="problem-6.html">Problem 6: Coding lab: symmetry and periodicity sanity checks</a>
+    </aside>
+  </div>
+</div>
+
+</main>
+<footer>
+  <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes remain the primary source material.</div>
+</footer>
+</body>
+</html>

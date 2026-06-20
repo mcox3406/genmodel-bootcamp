@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 1 notes on probability transport and flow maps</title>
+  <meta name="description" content="Lecture notes for Week 1: generation as sampling, vector fields and flows, the continuity equation, change of variables, the Hutchinson estimator, and why geometry matters." />
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="../../assets/style.css" />
+  <script>
+  window.MathJax = {
+    tex: { inlineMath: [['\\(', '\\)'], ['$', '$']], displayMath: [['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+<body>
+<nav class="topbar">
+  <div class="wide">
+    <a class="brand" href="../../index.html">GenModel Bootcamp</a>
+    <nav class="navlinks" aria-label="Site">
+      <a href="../../index.html">Overview</a>
+      <a href="../../docs/syllabus.pdf">Syllabus</a>
+    </nav>
+    <nav class="weekstrip" aria-label="Weeks">
+      <span class="weekstrip-label">Week</span>
+      <a href="../week1.html" class="active">1</a><a href="../week2.html">2</a><a href="../week3.html">3</a><a href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
+    </nav>
+  </div>
+</nav>
+
+<header class="page">
+  <div class="wrap">
+    <div class="kicker">Week 1 · lecture notes</div>
+    <h1 class="title">Probability transport and flow maps</h1>
+    <p class="subtitle">A compact tour of the concepts behind the Week 1 readings, from generation as sampling to the continuity equation and the geometry of scientific data.</p>
+    <nav class="actions" aria-label="Notes navigation">
+      <a class="action" href="../week1.html">Week 1 overview</a>
+      <a class="action primary" href="../../assets/notebooks/week1_notes.ipynb" download>Companion notebook</a>
+      <a class="action" href="problem-1.html">Problems</a>
+    </nav>
+  </div>
+</header>
+<main>
+  <div class="wide page-layout">
+    <article>
+      <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week1.html">Week 1</a> / Notes</div>
+
+      <div class="note"><p>These notes condense the Week 1 readings into the ideas you actually need, organized by concept rather than by paper. Every section names where it comes from and which problem puts it to work. A <a href="../../assets/notebooks/week1_notes.ipynb" download>companion notebook</a> reproduces every figure, so you can change a field, a step count, or a probe distribution and rerun. Notation follows the MIT notes, with time running from \(t=0\) at the noise end to \(t=1\) at the data end.</p></div>
+
+      <section id="sampling">
+        <h2><span class="num">1</span>Generation as sampling</h2>
+        <p>Generation means drawing a sample from a <strong>data distribution</strong> \(p_{\mathrm{data}}\) on \(\mathbb R^d\). The vague goal of a "good" molecule or image becomes the precise goal of a sample that is likely under \(p_{\mathrm{data}}\). A generative model is anything that returns such samples after training.</p>
+        <p>We never hold \(p_{\mathrm{data}}\) itself, only a finite dataset \(z_1,\dots,z_N\). The honest object is the <strong>empirical distribution</strong>, a sum of point masses,</p>
+        <div class="eqblock">\[ \widehat p_{\mathrm{data}} = \frac{1}{N}\sum_{i=1}^{N}\delta_{z_i}. \]</div>
+        <p>It has no smooth density on \(\mathbb R^d\) and no usable gradient, so the naive score \(\nabla_z\log\widehat p_{\mathrm{data}}\) is undefined. That single fact drives much of what follows. The fix, smoothing the empirical measure before differentiating, is exactly the denoising idea Week 2 is built on.</p>
+        <div class="source-note"><strong>From the readings.</strong> MIT notes, Section 1. Worked in <a href="problem-1.html">Problem 1</a>.</div>
+      </section>
+
+      <section id="flows">
+        <h2><span class="num">2</span>Vector fields, ODEs, and flows</h2>
+        <p>A <strong>velocity field</strong> \(u_t(x)\) assigns a velocity to every point \(x\) and time \(t\). Following it from a start point gives a trajectory, the solution of the ordinary differential equation</p>
+        <div class="eqblock">\[ \frac{\mathrm d}{\mathrm dt}X_t = u_t(X_t), \qquad X_0 = x_0. \]</div>
+        <p>The <strong>flow map</strong> \(\psi_t\) solves this for every start at once, so a single trajectory is recovered as \(X_t = \psi_t(X_0)\). Vector field, ODE, and flow are three descriptions of one object. Under mild conditions, \(u_t\) continuously differentiable with bounded derivative, the flow exists, is unique, and each \(\psi_t\) is a <strong>diffeomorphism</strong>, a smooth invertible warp of space. Neural networks meet these conditions, so existence is never the concern. For the linear field \(u_t(x)=-\theta x\) the flow is the closed form \(\psi_t(x_0)=e^{-\theta t}x_0\).</p>
+        <p>A <strong>flow model</strong> draws \(X_0\sim p_{\mathrm{init}}\), usually \(\mathcal N(0,I_d)\), and integrates a neural field \(u_t^\theta\) so that the endpoint matches the data,</p>
+        <div class="eqblock">\[ X_0\sim p_{\mathrm{init}},\qquad \frac{\mathrm d}{\mathrm dt}X_t = u_t^\theta(X_t),\qquad X_1\sim p_{\mathrm{data}}. \]</div>
+        <p>The network parameterizes the field, not the flow. To produce a sample you have to simulate the ODE. The figure below shows the three objects of the week, all from one field, the picture to keep in mind for everything that follows.</p>
+        <figure class="fig"><img src="../../assets/figures/w1-overview.png" alt="A velocity field as streamlines, its flow map warping a grid, and a Gaussian density transported into a sheared crescent." loading="lazy" /><figcaption>One velocity field, three views. The field \(u_t\) (left) integrates into the flow map \(\psi_{0,1}\) that warps space (center), and the flow transports the base density \(p_0\) to \(p_1\) (right).</figcaption></figure>
+        <div class="source-note"><strong>From the readings.</strong> MIT notes, Section 2.1, and Chen et al. (Neural ODEs). Worked in <a href="problem-2.html">Problem 2</a>.</div>
+      </section>
+
+      <section id="simulating">
+        <h2><span class="num">3</span>Simulating a flow</h2>
+        <p>Closed forms like \(e^{-\theta t}x_0\) are the exception, so in general the ODE is integrated numerically. <strong>Euler</strong> takes one step along the current velocity,</p>
+        <div class="eqblock">\[ X_{t+h} = X_t + h\,u_t(X_t), \qquad h = 1/N. \]</div>
+        <p><strong>Heun</strong> takes a trial Euler step, then averages the velocity at the start and the trial point, which makes it second order. <strong>RK4</strong> combines four evaluations and is fourth order. More steps cut the error, and higher order cuts it faster, as the slopes below show.</p>
+        <figure class="fig"><img src="../../assets/figures/w1n-solvers.png" alt="Euler, Heun, and RK4 trajectories against the exact spiral at twelve steps, beside a log-log plot of final error versus step count with slopes one, two, and four." loading="lazy" /><figcaption>At a fixed twelve steps Euler drifts off the exact spiral while Heun and RK4 track it (left). The error versus step count is a straight line in log-log, and its slope is the method order, one, two, and four (right).</figcaption></figure>
+        <p>There is a deeper reason to care about this. A residual network update \(h_{t+1}=h_t+f(h_t)\) is one Euler step, and the limit of stacking infinitely many small steps is exactly an ODE of the form above. Continuous depth is just time, and the network specifies the velocity. That is the bridge from familiar deep nets to the flows of this course.</p>
+        <div class="source-note"><strong>From the readings.</strong> MIT notes, Section 2.1, and Chen et al. (Neural ODEs). Built in <a href="problem-4.html">Problem 4</a>.</div>
+      </section>
+
+      <section id="continuity">
+        <h2><span class="num">4</span>How densities move, and the continuity equation</h2>
+        <p>The flow carries points, and it carries probability mass with them. The law of \(X_t\) is the <strong>pushforward</strong> of the base distribution, written \(p_t = (\psi_t)_\# p_0\). Because mass is neither created nor destroyed, \(p_t\) obeys the <strong>continuity equation</strong>,</p>
+        <div class="eqblock">\[ \partial_t p_t(x) + \nabla\!\cdot\big(p_t(x)\,u_t(x)\big) = 0, \]</div>
+        <p>the same conservation law that governs a compressible fluid. Reading it locally, density grows where the field converges, that is where the divergence \(\nabla\!\cdot u_t\) is negative, and thins where the field spreads out. This one equation links the field, the flow, and the moving density, and it returns in every later week.</p>
+        <div class="source-note"><strong>From the readings.</strong> MIT notes, Section 2.1. Derived in weak form in <a href="problem-2.html">Problem 2</a> and verified numerically in <a href="problem-4.html">Problem 4</a>.</div>
+      </section>
+
+      <section id="cov">
+        <h2><span class="num">5</span>Change of variables, from normalizing flows to CNFs</h2>
+        <p>A <strong>normalizing flow</strong> is an invertible map \(f\) from a simple base to the data, with inverse \(g=f^{-1}\). The change-of-variables formula tracks the density exactly,</p>
+        <div class="eqblock">\[ p_X(x) = p_Z\big(g(x)\big)\,\big|\det \nabla g(x)\big|. \]</div>
+        <p>Stacking \(K\) maps, the log-densities telescope into a sum of log-determinants, \(\log q_K = \log q_0 - \sum_{k}\log|\det \nabla f_k|\). The whole cost is that determinant. A general \(d\times d\) determinant is \(O(d^3)\), so early flows engineered structured maps, planar or coupling layers, whose Jacobian determinant collapses to something cheap. Invertibility plus a tractable determinant is the constraint that shaped those architectures.</p>
+        <p>Take the continuous limit, infinitely many infinitesimal steps, and the sum becomes an integral and the determinant becomes a <strong>trace</strong>. Along a continuous normalizing flow the log-density obeys the instantaneous change of variables,</p>
+        <div class="eqblock">\[ \frac{\mathrm d}{\mathrm dt}\log p_t(X_t) = -\,\nabla\!\cdot u_t(X_t) = -\,\operatorname{tr}\!\Big(\frac{\partial u_t}{\partial x}\Big), \qquad \log p_1(X_1) = \log p_0(X_0) - \int_0^1 \operatorname{tr}\!\Big(\frac{\partial u_t}{\partial x}\Big)\,\mathrm dt. \]</div>
+        <p>No determinant, no hand-built invertibility. You integrate the state and its log-density together. The figure checks this against an exactly solvable case.</p>
+        <figure class="fig"><img src="../../assets/figures/w1n-logdensity.png" alt="A Gaussian concentrating under a contraction field, beside the tracked log-density along trajectories lying exactly on the analytic curves." loading="lazy" /><figcaption>For the contraction \(u(x)=-\theta x\) the density concentrates (left). Tracking \(\log p_t(X_t)\) by integrating \(-\nabla\!\cdot u\) (dashed) lands exactly on the analytic Gaussian log-density (solid) along every trajectory (right).</figcaption></figure>
+        <div class="source-note"><strong>From the readings.</strong> Rezende &amp; Mohamed (normalizing flows) and Chen et al. (the instantaneous change of variables). Both are derived in <a href="problem-3.html">Problem 3</a>.</div>
+      </section>
+
+      <section id="hutchinson">
+        <h2><span class="num">6</span>The divergence bottleneck and the Hutchinson estimator</h2>
+        <p>The continuous formula trades a determinant for a trace, but the exact trace \(\operatorname{tr}(\partial u/\partial x)\) still costs one automatic-differentiation pass per dimension, which is too slow in high \(d\). The escape is <strong>Hutchinson's identity</strong>, which holds for any probe vector \(\epsilon\) with \(\mathbb E[\epsilon\epsilon^\top]=I\),</p>
+        <div class="eqblock">\[ \operatorname{tr}(A) = \mathbb E_{\epsilon}\big[\epsilon^\top A\,\epsilon\big]. \]</div>
+        <p>The inner quantity \(\epsilon^\top(\partial u/\partial x)\) is a vector-Jacobian product, one reverse-mode pass at the cost of a single field evaluation. The trace estimate is then \(O(1)\) passes regardless of dimension, which is what makes continuous flows scale (FFJORD). Because the Jacobian is never formed, the field can be free-form, with none of the architectural constraints discrete flows needed.</p>
+        <p>The estimate is unbiased but noisy. Rademacher probes, entries \(\pm 1\), have lower variance than Gaussian ones because they cancel the variance contribution of the diagonal. In practice one fixes a single \(\epsilon\) for an entire ODE solve, which keeps the dynamics deterministic without adding bias.</p>
+        <figure class="fig"><img src="../../assets/figures/w1n-hutchinson.png" alt="Running Monte Carlo estimates of the trace for Rademacher and Gaussian probes converging to the true trace, beside histograms of single-probe values with the Rademacher one visibly narrower." loading="lazy" /><figcaption>Both probe distributions give an unbiased, converging estimate of the trace (left). Per probe, Rademacher has the smaller spread, here roughly a quarter of the Gaussian variance (right).</figcaption></figure>
+        <div class="source-note"><strong>From the readings.</strong> Grathwohl et al. (FFJORD). The identity is proved and checked in <a href="problem-3.html">Problem 3</a>.</div>
+      </section>
+
+      <section id="geometry">
+        <h2><span class="num">7</span>Why geometry matters</h2>
+        <p>A generic vector in \(\mathbb R^d\) hides the structure of a molecule or crystal. A faithful model has to respect translation, rotation, permutation of identical atoms, and the periodicity of a lattice. The clean statement uses two distinct ideas. A density is <strong>invariant</strong> under a symmetry \(g\) when</p>
+        <div class="eqblock">\[ p(g\cdot x) = p(x), \]</div>
+        <p>and a velocity field is <strong>equivariant</strong> when it commutes with the symmetry, \(u(g\cdot x) = g\cdot u(x)\). The load-bearing fact is that an invariant base density pushed through an equivariant flow stays invariant. That is why equivariance is built into the architecture rather than learned from data. The figure shows equivariance as a square that commutes, rotating then flowing equals flowing then rotating.</p>
+        <figure class="fig"><img src="../../assets/figures/w1n-equivariance.png" alt="Two panels. Left, an equivariant contraction where rotating then flowing matches flowing then rotating. Right, a non-equivariant shear where the two orders disagree." loading="lazy" /><figcaption>For an equivariant field, \(\phi(Qx)\) (blue) lands inside \(Q\,\phi(x)\) (red circles), so the symmetry and the flow commute (left). For a non-equivariant shear they disagree (right).</figcaption></figure>
+        <p>Exact likelihood is also what connects flows to physics. A Boltzmann generator samples from a flow with known density \(q_X\) and reweights toward the equilibrium distribution \(e^{-u(x)}\) using the importance weight</p>
+        <div class="eqblock">\[ w(x) = \frac{e^{-u(x)}}{q_X(x)}, \]</div>
+        <p>which recovers unbiased equilibrium statistics and free energies even when the flow is only approximate. Sampling alone cannot do this, since the density in the denominator is what removes the bias. Finally, discrete chemistry sits awkwardly inside continuous flows. Atom and bond types are categorical, so graph flows resort to dequantization and step-by-step validity checks (GraphAF), and that mismatch never fully disappears. These tensions are what the equivariant networks, fractional coordinates, and hybrid models of later weeks exist to resolve.</p>
+        <div class="source-note"><strong>From the readings.</strong> Noé et al. (Boltzmann Generators), Satorras et al. (E(n) Equivariant Normalizing Flows), and Shi et al. (GraphAF). Explored in <a href="problem-1.html">Problem 1</a> and <a href="problem-6.html">Problem 6</a>.</div>
+      </section>
+
+      <section id="ahead">
+        <h2><span class="num">8</span>Looking ahead, from likelihood to regression</h2>
+        <p>Training a continuous flow by maximum likelihood means integrating an ODE inside every gradient step, which is expensive. The modern pivot fixes a path between base and data and learns the velocity by regression instead. With the straight interpolant \(x_t = (1-t)x_0 + t\,x_1\) the instantaneous displacement is \(v = x_1 - x_0\), and fitting \(u_\theta(x_t,t)\) to it by least squares recovers the conditional expectation</p>
+        <div class="eqblock">\[ u_\theta(x,t) \;\approx\; \mathbb E\big[\,x_1 - x_0 \;\big|\; x_t = x\,\big], \]</div>
+        <p>which is exactly the velocity that transports the base to the data along the continuity equation (Albergo and Vanden-Eijnden). No likelihoods and no solver in the loop. This is the seed of flow matching in Week 3 and stochastic interpolants in Week 4, and <a href="problem-5.html">Problem 5</a> is a hands-on first taste.</p>
+        <div class="source-note"><strong>From the readings.</strong> Albergo &amp; Vanden-Eijnden (Building Normalizing Flows with Stochastic Interpolants).</div>
+      </section>
+
+      <section id="recap">
+        <h2><span class="num">9</span>One-page recap</h2>
+        <ul>
+          <li>Generation is sampling from \(p_{\mathrm{data}}\). The empirical measure has no usable gradient, which forces smoothing later.</li>
+          <li>A field \(u_t\) defines an ODE whose flow \(\psi_t\) is a diffeomorphism. A flow model integrates a neural \(u_t^\theta\) from noise to data.</li>
+          <li>Simulate with Euler, Heun, or RK4. Order sets how fast error falls with step count. A ResNet is one Euler step.</li>
+          <li>The flow transports density by the continuity equation \(\partial_t p_t + \nabla\!\cdot(p_t u_t)=0\).</li>
+          <li>Discrete flows track density by a log-determinant. Continuous flows track it by \(\tfrac{\mathrm d}{\mathrm dt}\log p_t(X_t) = -\operatorname{tr}(\partial u/\partial x)\).</li>
+          <li>Hutchinson's identity \(\operatorname{tr}(A)=\mathbb E[\epsilon^\top A\epsilon]\) makes the trace cheap and frees the architecture.</li>
+          <li>Scientific data needs invariance \(p(gx)=p(x)\), secured by an equivariant field \(u(gx)=g\,u(x)\).</li>
+          <li>Fixing a path and regressing the velocity replaces likelihood training, the road into Weeks 3 and 4.</li>
+        </ul>
+      </section>
+
+      <div class="nextprev">
+        <a href="../week1.html">← Week 1 overview</a>
+        <a href="problem-1.html">Start the problems →</a>
+      </div>
+    </article>
+    <aside class="side" aria-label="Page contents">
+      <div class="side-title">On this page</div>
+      <a href="#sampling">1. Generation as sampling</a>
+      <a href="#flows">2. Fields, ODEs, flows</a>
+      <a href="#simulating">3. Simulating a flow</a>
+      <a href="#continuity">4. The continuity equation</a>
+      <a href="#cov">5. Change of variables</a>
+      <a href="#hutchinson">6. Hutchinson estimator</a>
+      <a href="#geometry">7. Why geometry matters</a>
+      <a href="#ahead">8. Looking ahead</a>
+      <a href="#recap">9. Recap</a>
+    </aside>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">Built as a lightweight course site. These notes condense the readings and link out to the original papers.</div>
+</footer>
+</body>
+</html>

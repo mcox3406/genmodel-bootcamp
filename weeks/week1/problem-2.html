@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 1 Problem 2 - Generative Modeling Bootcamp</title>
+  <meta name="description" content="Compute exact ODE flows, Jacobian determinants, divergence, and density evolution for three fields." />
+  <link rel="stylesheet" href="../../assets/style.css" />
+  
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(', '\\)'], ['$', '$']],
+    displayMath: [['\\[', '\\]']]
+  },
+  svg: { fontCache: 'global' }
+};
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="wide">
+    <a class="brand" href="../../index.html">GenModel Bootcamp</a>
+    <nav class="navlinks" aria-label="Site">
+      <a href="../../index.html">Overview</a>
+      <a href="../../docs/syllabus.pdf">Syllabus</a>
+    </nav>
+    <nav class="weekstrip" aria-label="Weeks">
+      <span class="weekstrip-label">Week</span>
+      <a href="../week1.html" class="active">1</a><a href="../week2.html">2</a><a href="../week3.html">3</a><a href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
+    </nav>
+  </div>
+</nav>
+
+<header class="page">
+  <div class="wrap">
+    <div class="kicker">Week 1 · Problem 2 of 6</div>
+    <h1 class="title">Analytic flow maps and the continuity equation</h1>
+    <p class="subtitle">Compute exact ODE flows, Jacobian determinants, divergence, and density evolution for three fields.</p>
+    <nav class="actions" aria-label="Problem navigation"><a class="action" href="../week1.html">Week 1 overview</a><a class="action" href="../../docs/syllabus.pdf">Syllabus</a></nav>
+  </div>
+</header>
+<main>
+
+<div class="wide">
+  <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week1.html">Week 1</a> / Problem 2</div>
+  <div class="problem-shell">
+    <article>
+      <div class="problem-meta"><span>derivation</span><span>Week 1</span><span>selected assignment</span></div>
+      <div class="prereq">
+        <div class="prereq-col">
+          <strong>Concepts you need</strong>
+          <ul>
+            <li>Solving linear ODEs, plus matrix exponentials for part 3</li>
+            <li>Jacobians and determinants of maps on \(\mathbb R^d\)</li>
+            <li>Divergence of a vector field</li>
+            <li>Integration by parts against a test function (for the weak form in part 4)</li>
+          </ul>
+        </div>
+        <div class="prereq-col">
+          <strong>If you get stuck</strong>
+          <ul>
+            <li><a href="https://diffusion.csail.mit.edu/2026/docs/lecture_notes.pdf" target="_blank" rel="noopener">MIT notes, Section 2.1</a> for flow maps and the continuity equation, whose integration-by-parts derivation matches the weak form here</li>
+            <li><a href="https://en.wikipedia.org/wiki/Matrix_exponential" target="_blank" rel="noopener">Matrix exponential</a> for solving \(u(x)=Ax\), where computing \(e^{tA}\) by hand gives sine and cosine for the rotation field</li>
+            <li>Problem 1, part 3 for pushforward notation if the density bookkeeping feels unclear</li>
+          </ul>
+        </div>
+      </div>
+      <div class="source-note"><strong>Source note.</strong> Adapted from <a href="https://diffusion.csail.mit.edu/2026/docs/lecture_notes.pdf" target="_blank" rel="noopener">MIT notes Section 2.1</a> on flow models and the continuity-equation perspective used later for flow matching.</div>
+      
+<p>Let \(X_t\in\mathbb R^d\) evolve by the ODE</p>
+<div class="eqblock">\[
+\frac{d}{dt}X_t = u_t(X_t), \qquad X_s=x_s.
+\]</div>
+<p>The associated flow map \(\psi_{s,t}\) sends the state at time \(s\) to the state at time \(t\). In physical terms, \(p_t\) is a compressible fluid density, \(u_t\) is the velocity field, and probability mass is conserved.</p>
+<figure class="fig"><img src="../../assets/figures/w1p2.png" alt="Streamlines of the contraction, translation, and rotation fields acting on a circle" loading="lazy" /><figcaption>The three flows of parts 1 to 3 acting on the same initial circle (dashed) over one unit of time (solid). Contraction shrinks volume, while translation and rotation preserve it. The tracked points show where the flow map sends individual states.</figcaption></figure>
+<ol class="parts">
+<li>For \(u(x)=-\theta x\), solve the ODE exactly. Compute \(\psi_{0,t}\), \(\psi_{0,t}^{-1}\), \(\det \nabla \psi_{0,t}\), and \(\nabla\cdot u\).</li>
+<li>For \(u(x)=c\), where \(c\in\mathbb R^d\) is constant, solve the ODE and explain why the flow is volume-preserving.</li>
+<li>For \(d=2\) and \(u(x)=Ax\), with
+\[
+A=\begin{pmatrix}0 & -\omega \\ \omega & 0\end{pmatrix},
+\]
+solve the ODE and show that the flow is volume-preserving.</li>
+<li>Using a smooth compactly supported test function \(\varphi\), derive the weak form of the continuity equation and then the PDE
+\[
+\partial_t p_t(x)+\nabla\cdot(p_t(x)u_t(x))=0.
+\]</li>
+<li>Verify the continuity equation for the contraction field using the density obtained from the change of variables formula.</li>
+<li>Show that the flow maps satisfy the semigroup property
+\[
+\psi_{s,r}=\psi_{t,r}\circ\psi_{s,t}, \qquad s\leq t\leq r.
+\]
+Explain why this identity becomes important later when we learn finite-time flow maps directly.</li>
+<li>Time reversal. Suppose \(u_t\) transports \(p_0\) to \(p_1\) over \(t\in[0,1]\). Show that \(\tilde u_t(x) = -u_{1-t}(x)\) transports \(p_1\) back to \(p_0\). For the contraction field, describe what the reversed flow does to a tight Gaussian. In Week 2 you will see that reversing a stochastic process is not this easy, since the correction term is exactly the smoothed score you derived in Problem 1.</li>
+</ol>
+<div class="why"><strong>Why this matters.</strong> This is the central mathematical picture behind the first half of the course. Flow matching, stochastic interpolants, probability-flow ODEs, and flow-map models are all refinements of this same transport view.</div>
+
+      <div class="pager"><a href="problem-1.html">← Problem 1: Data distributions, representations, and physical symmetries</a><a href="problem-3.html">Problem 3: Change of variables and continuous log-likelihoods →</a></div>
+    </article>
+    <aside class="problem-nav" aria-label="Week 1 problem navigation">
+      <a href="notes.html">Lecture notes</a>
+      <strong>Week 1 problems</strong>
+      <a href="problem-1.html">Problem 1: Data distributions, representations, and physical symmetries</a><a class="current" href="problem-2.html">Problem 2: Analytic flow maps and the continuity equation</a><a href="problem-3.html">Problem 3: Change of variables and continuous log-likelihoods</a><a href="problem-4.html">Problem 4: Coding lab: build a probability-flow sandbox</a><a href="problem-5.html">Problem 5: Coding lab: learn a vector field from Gaussian to two moons</a><a href="problem-6.html">Problem 6: Coding lab: symmetry and periodicity sanity checks</a>
+    </aside>
+  </div>
+</div>
+
+</main>
+<footer>
+  <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes remain the primary source material.</div>
+</footer>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 1 Problem 6 - Generative Modeling Bootcamp</title>
+  <meta name="description" content="Test whether coordinate velocity fields respect translation, rotation, permutation, center-of-mass, and periodic-boundary constraints." />
+  <link rel="stylesheet" href="../../assets/style.css" />
+  
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(', '\\)'], ['$', '$']],
+    displayMath: [['\\[', '\\]']]
+  },
+  svg: { fontCache: 'global' }
+};
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="wide">
+    <a class="brand" href="../../index.html">GenModel Bootcamp</a>
+    <nav class="navlinks" aria-label="Site">
+      <a href="../../index.html">Overview</a>
+      <a href="../../docs/syllabus.pdf">Syllabus</a>
+    </nav>
+    <nav class="weekstrip" aria-label="Weeks">
+      <span class="weekstrip-label">Week</span>
+      <a href="../week1.html" class="active">1</a><a href="../week2.html">2</a><a href="../week3.html">3</a><a href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
+    </nav>
+  </div>
+</nav>
+
+<header class="page">
+  <div class="wrap">
+    <div class="kicker">Week 1 · Problem 6 of 6</div>
+    <h1 class="title">Coding lab: symmetry and periodicity sanity checks</h1>
+    <p class="subtitle">Test whether coordinate velocity fields respect translation, rotation, permutation, center-of-mass, and periodic-boundary constraints.</p>
+    <nav class="actions" aria-label="Problem navigation"><a class="action" href="../week1.html">Week 1 overview</a><a class="action" href="../../docs/syllabus.pdf">Syllabus</a></nav>
+  </div>
+</header>
+<main>
+
+<div class="wide">
+  <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week1.html">Week 1</a> / Problem 6</div>
+  <div class="problem-shell">
+    <article>
+      <div class="problem-meta"><span>coding + scientific geometry</span><span>Week 1</span><span>selected assignment</span></div>
+      <div class="prereq">
+        <div class="prereq-col">
+          <strong>Concepts you need</strong>
+          <ul>
+            <li>The transformation laws you wrote in Problem 1, parts 4 and 6</li>
+            <li>Rotation and permutation matrices acting on point clouds</li>
+            <li>Center of mass and why translation symmetry forces mean-zero updates</li>
+            <li>Fractional coordinates, wrapping modulo one, and the minimum-image convention</li>
+          </ul>
+        </div>
+        <div class="prereq-col">
+          <strong>If you get stuck</strong>
+          <ul>
+            <li><a href="https://dmol.pub/dl/Equivariant.html" target="_blank" rel="noopener">DMol Chapter 10</a> for equivariance tests written as equations you can translate into asserts</li>
+            <li><a href="https://arxiv.org/abs/2006.02425" target="_blank" rel="noopener">Equivariant Flows</a> for why the center of mass must be handled explicitly</li>
+            <li><a href="https://en.wikipedia.org/wiki/Periodic_boundary_conditions" target="_blank" rel="noopener">Periodic boundary conditions</a> for the minimum-image distance in part 7</li>
+          </ul>
+        </div>
+      </div>
+      <div class="source-note"><strong>Source note.</strong> Original lab, motivated by <a href="https://arxiv.org/abs/2006.02425" target="_blank" rel="noopener">Equivariant Flows</a>, <a href="https://arxiv.org/abs/2203.17003" target="_blank" rel="noopener">E(3)-equivariant diffusion</a>, and <a href="https://arxiv.org/abs/2110.06197" target="_blank" rel="noopener">CDVAE</a>-style crystal models with periodic boundaries.</div>
+      
+<p>This lab turns physical symmetry into executable tests. The goal is to make students skeptical of vague claims like "the model is equivariant" unless the transformation laws have actually been checked.</p>
+<p>For a molecular configuration \(R\in\mathbb R^{n\times 3}\), implement three candidate velocity fields:</p>
+<div class="eqblock">\[
+u_i^{(1)}(R)=-r_i,
+\qquad
+u_i^{(2)}(R)=r_i-\bar r,
+\qquad
+u_i^{(3)}(R)=\sum_{j\neq i}\exp(-\|r_i-r_j\|^2)(r_j-r_i),
+\]</div>
+<p>where \(\bar r=n^{-1}\sum_i r_i\).</p>
+<figure class="fig"><img src="../../assets/figures/w1p6.png" alt="The three candidate velocity fields drawn as arrows on the same point cloud" loading="lazy" /><figcaption>The three candidate fields acting on the same point cloud, with the origin (+) and center of mass (&#215;) marked. One pulls toward the origin, one pushes away from the center of mass, one is built from pairwise differences. Which transformation laws each satisfies is the subject of parts 1 and 2.</figcaption></figure>
+<ol class="parts">
+<li>Write numerical tests for translation equivariance, rotation equivariance, permutation equivariance among identical atoms, and center-of-mass preservation.</li>
+<li>Create a table showing which candidate fields pass which tests. Explain any failures in words.</li>
+<li>Explain why any field of the form \(u_i(R)=\sum_{j\neq i}\phi(\|r_i-r_j\|)\,(r_j-r_i)\) is automatically translation, rotation, and permutation equivariant. This one-line recipe, scalar functions of invariants multiplying difference vectors, is the core trick behind the E(3)-equivariant architectures of Week 10.</li>
+<li>For the best-behaved field, integrate a small point cloud and plot the motion of the points. Does the center of mass move?</li>
+<li>Make equivariance visible. Integrate trajectories from an initial cloud \(R_0\) and from a rotated copy \(QR_0\), then apply \(Q^{-1}\) to the second set of trajectories and overlay the two families. For an equivariant field the curves coincide to solver tolerance. Repeat with a non-equivariant candidate and watch them split apart. Save both figures. This overlay is the most honest equivariance test you will see all course.</li>
+<li>Now switch to a toy 2D periodic cell with fractional coordinates \(x\in[0,1)^2\). Integrate the periodic velocity field
+\[
+u(x)=\begin{pmatrix}
+\sin(2\pi x_1)\cos(2\pi x_2)\\
+-\cos(2\pi x_1)\sin(2\pi x_2)
+\end{pmatrix}
+\]
+while wrapping coordinates modulo one. Plot the field as a streamplot over the unit cell and overlay one long trajectory drawn wrapped. The jumps across the cell boundary are not plotting errors, they are the geometry.</li>
+<li>Compare wrapped and unwrapped integration. Explain why Euclidean distance is misleading near a periodic boundary and implement a minimum-image distance. Visualize the failure. For a reference point near a cell corner, plot Euclidean distance and minimum-image distance over the whole cell as two heatmaps. The seam in the first picture is exactly what a model using naive distances feels.</li>
+</ol>
+<div class="deliverable"><strong>Deliverable.</strong> The pass/fail test table, the trajectory-overlay equivariance figures for one passing and one failing field, the torus streamplot with a wrapped trajectory, and the pair of distance heatmaps.</div>
+<div class="why"><strong>Why this matters.</strong> This is the first explicitly AI4Chem and materials lab. It previews why later models need E(3)-equivariant architectures, atom-type handling, fractional coordinates, lattice variables, and periodic boundary conditions.</div>
+
+      <div class="pager"><a href="problem-5.html">← Problem 5: Coding lab: learn a vector field from Gaussian to two moons</a><a href="../week1.html">Back to Week 1 overview →</a></div>
+    </article>
+    <aside class="problem-nav" aria-label="Week 1 problem navigation">
+      <a href="notes.html">Lecture notes</a>
+      <strong>Week 1 problems</strong>
+      <a href="problem-1.html">Problem 1: Data distributions, representations, and physical symmetries</a><a href="problem-2.html">Problem 2: Analytic flow maps and the continuity equation</a><a href="problem-3.html">Problem 3: Change of variables and continuous log-likelihoods</a><a href="problem-4.html">Problem 4: Coding lab: build a probability-flow sandbox</a><a href="problem-5.html">Problem 5: Coding lab: learn a vector field from Gaussian to two moons</a><a class="current" href="problem-6.html">Problem 6: Coding lab: symmetry and periodicity sanity checks</a>
+    </aside>
+  </div>
+</div>
+
+</main>
+<footer>
+  <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes remain the primary source material.</div>
+</footer>
+</body>
+</html>
