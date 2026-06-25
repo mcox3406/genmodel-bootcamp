@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 2 notes on diffusion and score-based models</title>
+  <meta name="description" content="Lecture notes for Week 2: forward noising SDEs, the score, reverse-time SDEs and the probability-flow ODE, denoising score matching, the EDM design space, the score as a force field, and equivariant diffusion for 3D molecules." />
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="../../assets/style.css" />
+  <script>
+  window.MathJax = {
+    tex: { inlineMath: [['\\(', '\\)'], ['$', '$']], displayMath: [['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+<body>
+<nav class="topbar">
+  <div class="wide">
+    <a class="brand" href="../../index.html">GenModel Bootcamp</a>
+    <nav class="navlinks" aria-label="Site">
+      <a href="../../index.html">Overview</a>
+      <a href="../../docs/syllabus.pdf">Syllabus</a>
+    </nav>
+    <nav class="weekstrip" aria-label="Weeks">
+      <span class="weekstrip-label">Week</span>
+      <a href="../week1.html">1</a><a href="../week2.html" class="active">2</a><a href="../week3.html">3</a><a href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
+    </nav>
+  </div>
+</nav>
+
+<header class="page">
+  <div class="wrap">
+    <div class="kicker">Week 2 · lecture notes</div>
+    <h1 class="title">Diffusion and score-based models</h1>
+    <p class="subtitle">A compact tour of the concepts behind the Week 2 readings, from the forward noising process to the reverse-time SDE, the probability-flow ODE, denoising score matching, the EDM design space, and the score as a molecular force field.</p>
+    <nav class="actions" aria-label="Notes navigation">
+      <a class="action" href="../week2.html">Week 2 overview</a>
+      <a class="action primary" href="../../assets/notebooks/week2_notes.ipynb" download>Companion notebook</a>
+      <a class="action" href="problem-1.html">Problems</a>
+    </nav>
+  </div>
+</header>
+<main>
+  <div class="wide page-layout">
+    <article>
+      <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week2.html">Week 2</a> / Notes</div>
+
+      <div class="note"><p>These notes condense the Week 2 readings into the ideas you actually need, organized by concept rather than by paper. Every section names where it comes from and which problem puts it to work. A <a href="../../assets/notebooks/week2_notes.ipynb" download>companion notebook</a> reproduces every figure and the live sampler below, so you can change the noise schedule, the sampler, or the target and rerun. Notation follows the MIT notes and continues directly from Week 1, with the score \(\nabla_x\log p_t\) replacing last week's velocity field as the learned object.</p></div>
+
+      <section id="from-flows">
+        <h2><span class="num">1</span>From flows to diffusions, the one new ingredient</h2>
+        <p>Week 1 generated samples by deterministic transport: integrate a velocity field and the base density flows onto the data. Diffusion changes one thing. Instead of choosing a transport and learning its velocity, we fix a <strong>forward process</strong> that destroys structure by adding noise, and learn to run it backward. The object the network learns is no longer a velocity but the <strong>score</strong>, the gradient of the log-density of the noised data,</p>
+        <div class="eqblock">\[ s_t(x) = \nabla_x \log p_t(x). \]</div>
+        <p>Everything else from Week 1 survives. Sampling is still integrating a differential equation; divergence, solver order, and trajectory geometry still govern cost and accuracy. The figure that opened the overview is the whole week in one line: a forward process blurs data toward a Gaussian prior, the score points back toward where mass concentrates, and the reverse dynamics built from that score regenerate the data.</p>
+        <div class="source-note"><strong>From the readings.</strong> MIT notes, diffusion sections; Sohl-Dickstein et al. (2015). The score-as-learned-object framing is Song &amp; Ermon (NCSN).</div>
+      </section>
+
+      <section id="forward">
+        <h2><span class="num">2</span>The forward process and its perturbation kernel</h2>
+        <p>The forward process is an SDE that pushes any data point toward noise. Two equivalent conventions appear in the readings. The <strong>variance-preserving</strong> (VP) form, used by DDPM, keeps the total variance near one and admits the closed-form marginal</p>
+        <div class="eqblock">\[ x_t = \sqrt{\bar\alpha_t}\,x_0 + \sqrt{1-\bar\alpha_t}\,\epsilon, \qquad \epsilon\sim\mathcal N(0,I). \]</div>
+        <p>The <strong>variance-exploding</strong> (VE) form, used by NCSN and EDM, leaves the data alone and simply adds noise of growing scale, so the marginal is the data distribution convolved with a Gaussian,</p>
+        <div class="eqblock">\[ x_\sigma = x_0 + \sigma\,\epsilon, \qquad p_\sigma = p_{\mathrm{data}} * \mathcal N(0,\sigma^2 I). \]</div>
+        <p>Either way the key object is the <strong>perturbation kernel</strong>: the noise level indexes a family of progressively smoother densities that interpolate from the data (sharp, multimodal) to a single wide Gaussian. This is the Week 1 Problem 1 smoothing, now a continuum. The signal-to-noise ratio falls monotonically along it, and that single scalar, not the particular VP/VE bookkeeping, is what matters.</p>
+        <figure class="fig"><img src="../../assets/figures/w2n-forward.png" alt="Four panels showing a three-mode molecule-like distribution at increasing noise levels, from sharp clean data through progressively blurrier clouds to near-isotropic noise, with the signal-to-noise ratio falling." loading="lazy" /><figcaption>The forward kernel \(p_\sigma = p_{\mathrm{data}} * \mathcal N(0,\sigma^2 I)\) on a three-mode target. As \(\sigma\) grows the modes merge and the distribution relaxes to a wide Gaussian; the signal-to-noise ratio \(\approx \sigma^{-2}\) falls. The reverse process must climb back up this ladder.</figcaption></figure>
+        <div class="source-note"><strong>From the readings.</strong> Ho et al. (DDPM) for the VP marginal; Song &amp; Ermon and Karras et al. (EDM) for the VE view. Used in <a href="problem-1.html">Problem 1</a>.</div>
+      </section>
+
+      <section id="reverse">
+        <h2><span class="num">3</span>Reversing time: the reverse SDE and the probability-flow ODE</h2>
+        <p>The pivotal fact, due to Anderson (1982), is that the time reversal of the forward diffusion is again a diffusion, and it is driven by the score. For a forward SDE \(\mathrm dx = f(x,t)\,\mathrm dt + g(t)\,\mathrm dw\), the <strong>reverse-time SDE</strong> is</p>
+        <div class="eqblock">\[ \mathrm dx = \big[f(x,t) - g(t)^2\,\nabla_x\log p_t(x)\big]\,\mathrm dt + g(t)\,\mathrm d\bar w, \]</div>
+        <p>integrated from the noise end back to the data end. The same forward marginals are also reproduced exactly by a deterministic ODE, the <strong>probability-flow ODE</strong>,</p>
+        <div class="eqblock">\[ \frac{\mathrm dx}{\mathrm dt} = f(x,t) - \tfrac{1}{2}g(t)^2\,\nabla_x\log p_t(x). \]</div>
+        <p>This is the bridge back to Week 1: the probability-flow ODE is an ordinary flow whose velocity is built from the score, so it transports density by the continuity equation, gives exact likelihoods through the instantaneous change of variables, and integrates with the same Euler/Heun/RK4 machinery. One trained score, two samplers. The reverse SDE re-injects noise at every step and can correct its own errors, which often helps sample quality; the ODE is deterministic, cheaper, invertible, and gives likelihoods, at the cost of being less forgiving. They share every time-marginal (exactly, with the true score and exact integration) but have entirely different path laws, and neither is a physical trajectory: an ODE path between modes is not a reaction mechanism and an SDE path is not a Langevin trajectory of the system.</p>
+        <figure class="fig"><img src="../../assets/figures/w2n-sde-ode.png" alt="Two panels comparing reverse trajectories from noise to three modes: smooth deterministic curves for the probability-flow ODE on the left, jagged stochastic paths for the reverse SDE on the right, both landing on the same modes." loading="lazy" /><figcaption>Two samplers, one model. The probability-flow ODE (left) follows smooth deterministic paths; the reverse SDE (right) is stochastic and jagged. Both reproduce the same marginals and land on the same modes.</figcaption></figure>
+        <p>The demo below runs both on a multi-well, molecule-like target whose perturbed score is known in closed form, so what you see is the exact reverse process, not a trained approximation. Toggle the sampler and watch the same noise cloud condense onto the three basins.</p>
+        <div class="playground" id="diffusion-playground">
+          <noscript><p style="padding:12px">The interactive demo requires JavaScript. The static figure above shows the same comparison.</p></noscript>
+        </div>
+        <p class="pg-caption">1,400 particles from a wide Gaussian, denoised down the EDM noise schedule with the exact mixture score. The probability-flow ODE moves every particle deterministically; the reverse SDE adds Brownian kicks. Turn on the score field to see the vectors the sampler is following.</p>
+        <div class="source-note"><strong>From the readings.</strong> Song et al. (Score SDE) and Anderson (1982). Implemented in <a href="problem-3.html">Problem 3</a> and derived in <a href="problem-1.html">Problem 1</a>.</div>
+      </section>
+
+      <section id="dsm">
+        <h2><span class="num">4</span>Learning the score: denoising score matching</h2>
+        <p>The score of the noised data is not something we can read off the empirical distribution, but it has a free training signal. <strong>Denoising score matching</strong> (Vincent, 2011) replaces the intractable objective \(\mathbb E_{p_\sigma}\|s_\theta - \nabla\log p_\sigma\|^2\) with a tractable one. Corrupt a clean sample, \(x_\sigma = x_0 + \sigma\epsilon\), and regress the network onto the direction back to the clean point,</p>
+        <div class="eqblock">\[ \mathcal L(\theta) = \mathbb E_{x_0,\;\sigma,\;\epsilon}\,\Big\| s_\theta(x_\sigma,\sigma) - \frac{x_0 - x_\sigma}{\sigma^2}\Big\|^2, \qquad \frac{x_0 - x_\sigma}{\sigma^2} = -\frac{\epsilon}{\sigma}. \]</div>
+        <p>The per-sample target points from the noisy point straight back to its clean source. No single noisy point sits at the true score, but the minimizer of this loss is the conditional mean, and that conditional mean <em>is</em> the score of the noised density,</p>
+        <div class="eqblock">\[ s_\theta^\star(x,\sigma) = \mathbb E\big[\,\nabla\log p_\sigma\mid x_\sigma = x\big] = \nabla_x\log p_\sigma(x). \]</div>
+        <p>Equivalently the model can predict the noise \(\epsilon\) (DDPM's parameterization) or the clean sample \(x_0\) (the denoiser, the EDM parameterization); the three are linear reparameterizations of one another, related by <strong>Tweedie's formula</strong> \( \mathbb E[x_0\mid x_\sigma] = x_\sigma + \sigma^2\nabla\log p_\sigma(x_\sigma)\). This is the same conditional-expectation regression that defined flow matching in Week 1 Problem 5, just with a noised input.</p>
+        <figure class="fig"><img src="../../assets/figures/w2n-dsm.png" alt="Left, a clean sample with several noisy copies each carrying an arrow pointing back to the clean sample. Right, the exact score field of the noised mixture density, recovered as the average of those per-sample targets." loading="lazy" /><figcaption>Each noisy draw \(x_\sigma\) carries a target \((x_0-x_\sigma)/\sigma^2\) pointing back to its clean source (left). No single arrow is the score, but their conditional average is exactly \(\nabla\log p_\sigma\) (right).</figcaption></figure>
+        <div class="source-note"><strong>From the readings.</strong> Vincent (2011); Ho et al. (DDPM) for \(\epsilon\)-prediction. Derived in <a href="problem-1.html">Problem 1</a>, trained in <a href="problem-3.html">Problem 3</a>.</div>
+      </section>
+
+      <section id="edm">
+        <h2><span class="num">5</span>The EDM design space</h2>
+        <p>Karras et al. observe that most of diffusion's moving parts are largely separable choices that had been tangled together. Pull them apart and each can be set on its own, though their best settings can still interact. <strong>Preconditioning</strong> wraps the raw network \(F_\theta\) so its inputs and targets stay unit-scale at every noise level,</p>
+        <div class="eqblock">\[ D_\theta(x,\sigma) = c_{\mathrm{skip}}(\sigma)\,x + c_{\mathrm{out}}(\sigma)\,F_\theta\big(c_{\mathrm{in}}(\sigma)\,x,\;c_{\mathrm{noise}}(\sigma)\big), \]</div>
+        <p>with the coefficients fixed by requiring unit-variance inputs and targets given \(\sigma_{\mathrm{data}}\). At small \(\sigma\) the denoiser is nearly the identity (\(c_{\mathrm{skip}}\to1\)); at large \(\sigma\) it must predict the clean signal from almost pure noise (\(c_{\mathrm{skip}}\to0\)). The remaining knobs are the <strong>training noise distribution</strong> \(\ln\sigma\sim\mathcal N(P_{\mathrm{mean}},P_{\mathrm{std}}^2)\), the <strong>loss weighting</strong> that equalizes the gradient signal across noise levels, the <strong>time discretization</strong> \(\sigma_i = \big(\sigma_{\max}^{1/\rho} + \tfrac{i}{N-1}(\sigma_{\min}^{1/\rho}-\sigma_{\max}^{1/\rho})\big)^\rho\), and a <strong>second-order (Heun) sampler</strong> that reaches good samples in far fewer steps.</p>
+        <figure class="fig"><img src="../../assets/figures/w2n-edm.png" alt="Left, the EDM preconditioning coefficients c_skip, c_out, c_in versus noise level on a log axis. Right, the EDM sampling noise schedule, dense at low noise." loading="lazy" /><figcaption>EDM preconditioning keeps the network's job unit-scale across \(\sigma\) (left). The \(\rho=7\) schedule places sampling steps where they matter, densely at low noise (right).</figcaption></figure>
+        <p>The lesson is the mindset, not the formulas: these are knobs tuned to the data, and the right settings for 3D molecular coordinates, with their own characteristic length scales, are not the image defaults. <a href="problem-2.html">Problem 2</a> derives the preconditioning coefficients and asks what changes for molecules.</p>
+        <div class="source-note"><strong>From the readings.</strong> Karras et al. (EDM, 2022); refinements in EDM2 (2023). Derived in <a href="problem-2.html">Problem 2</a>.</div>
+      </section>
+
+      <section id="force-field">
+        <h2><span class="num">6</span>The score is a force field</h2>
+        <p>For physical systems the score is not an abstraction. If the data follow a Boltzmann distribution over <em>full Cartesian</em> configurations \(x\) at physical inverse temperature \(\beta_{\mathrm{phys}}=1/k_BT_{\mathrm{phys}}\),</p>
+        <div class="eqblock">\[ p(x) = \frac{1}{Z}\,e^{-\beta_{\mathrm{phys}} U(x)}, \qquad \nabla_x\log p(x) = -\beta_{\mathrm{phys}}\,\nabla_x U(x), \]</div>
+        <p>then the score is exactly the physical <strong>force</strong> \(-\nabla U\), scaled by inverse temperature, and the intractable normalizer \(Z\) drops out under the gradient, which is precisely why score-based methods sidestep the partition function. One qualification: for a reduced or collective coordinate the corresponding object is a free energy / potential of mean force, so the score there is a <em>mean</em> force (with entropic and Jacobian contributions), not the microscopic atomic force. The picture to keep is annealing-like rather than literally thermodynamic: the forward process is an artificial Gaussianization (the endpoint is a reference Gaussian, not an ideal gas), and the diffusion noise \(\sigma\) is not a temperature. The annealed-Langevin sampler of NCSN makes the analogy explicit while remaining an artificial continuation in \(\sigma\).</p>
+        <figure class="fig"><img src="../../assets/figures/w2p1.png" alt="Left, a double-well Boltzmann density relaxing to a Gaussian under a forward process. Right, the score field of a double-well density shown as a force field pointing into the two basins." loading="lazy" /><figcaption>The forward process relaxes a double-well Boltzmann density to noise (left). Its score \(\nabla\log p = -\beta\nabla U\) is the force field, pointing into both basins (right). This is the object a diffusion model learns to sample an energy landscape.</figcaption></figure>
+        <p>The correspondence also exposes the hard part. A model that captures the shape of every basin can still get the <em>relative weights</em> of competing basins wrong, the analogue of a wrong free-energy difference, and no per-sample validity check will catch it. Multimodality, rare transitions, and basin populations are exactly where diffusion models for molecules succeed or fail.</p>
+        <div class="source-note"><strong>From the readings.</strong> The Boltzmann/score correspondence underlies Song &amp; Ermon's annealed Langevin. Explored in <a href="problem-1.html">Problem 1</a> and <a href="problem-3.html">Problem 3</a>.</div>
+      </section>
+
+      <section id="equivariance">
+        <h2><span class="num">7</span>Equivariant diffusion for 3D molecules</h2>
+        <p>Moving the machinery onto real 3D structures reintroduces the geometry of Week 1. A distribution over molecular geometries should be invariant to rigid rotations and translations: rotating a molecule does not change its probability. The clean way to get an invariant model is to make the <strong>denoiser equivariant</strong>,</p>
+        <div class="eqblock">\[ D_\theta(Q x + t,\sigma) = Q\,D_\theta(x,\sigma) + t \quad\text{for all } Q\in O(3),\ t\in\mathbb R^3, \]</div>
+        <p>so that an invariant Gaussian prior pushed through equivariant reverse dynamics yields an invariant model, the same invariant-base-plus-equivariant-map argument from Week 1. The molecular EDM builds \(D_\theta\) from an E(n)-equivariant graph network acting on relative positions, and runs the whole diffusion in the <strong>zero-center-of-geometry subspace</strong> (the arithmetic mean of the coordinates, not the mass-weighted center of mass) so translation invariance is handled by construction rather than learned. Because a distance-based network is also reflection-equivariant, the realized group is \(E(3)/O(3)\); distinguishing a chiral molecule from its mirror image needs the smaller group \(SE(3)\).</p>
+        <figure class="fig"><img src="../../assets/figures/w2p4.png" alt="Left, a noisy point cloud denoised into a ring-shaped molecule. Right, an equivariance commuting square showing that denoising a rotated input equals rotating the denoised output." loading="lazy" /><figcaption>Reverse diffusion denoises a point cloud into a molecule (left). An equivariant denoiser commutes with rotation, \(D(Qx)=Q\,D(x)\) (right), so the generated distribution is rotation-invariant by construction.</figcaption></figure>
+        <p>The state space is the design choice that distinguishes the models. EDM diffuses atom coordinates and a continuous relaxation of atom types together; GeoDiff fixes the bonded graph and diffuses only coordinates; TargetDiff adds a fixed protein pocket as conditioning. All three rely on the same equivariance principle. <a href="problem-4.html">Problem 4</a> builds a miniature of this end to end.</p>
+        <div class="source-note"><strong>From the readings.</strong> Hoogeboom et al. (molecular EDM), Xu et al. (GeoDiff), Guan et al. (TargetDiff). Built in <a href="problem-4.html">Problem 4</a>.</div>
+      </section>
+
+      <section id="ahead">
+        <h2><span class="num">8</span>Looking ahead, from a fixed path to a chosen one</h2>
+        <p>The probability-flow ODE shows that diffusion is, underneath, a deterministic flow, exactly the Week 1 object. But its trajectories are inherited from a noising process and they curve, which is why sampling needs many steps. Week 3 asks why inherit the path at all. Flow matching chooses the interpolation between noise and data directly, the straight line being the simplest, and regresses the velocity onto it with the same conditional-expectation move used in this week's denoising loss. Diffusion becomes one curved member of a larger family, and straighter paths are what make few-step generation possible. The score you learned this week and the velocity you learn next are two coordinates on the same transport.</p>
+        <div class="source-note"><strong>From the readings.</strong> Sets up Week 3 (Flow Matching, Rectified Flow).</div>
+      </section>
+
+      <section id="recap">
+        <h2><span class="num">9</span>One-page recap</h2>
+        <ul>
+          <li>Fix a forward SDE that turns data into Gaussian noise. Its perturbation kernel is a ladder of smoothed densities indexed by signal-to-noise.</li>
+          <li>The time reversal is again a diffusion driven by the score \(\nabla\log p_t\). The reverse-time SDE and the probability-flow ODE share all marginals.</li>
+          <li>The probability-flow ODE is a Week 1 flow with velocity built from the score, so likelihoods and the continuity equation carry over.</li>
+          <li>Denoising score matching regresses \(s_\theta\) onto \((x_0-x_\sigma)/\sigma^2\); its conditional mean is the exact score. Predicting \(\epsilon\), \(x_0\), or the score are reparameterizations (Tweedie).</li>
+          <li>EDM separates the largely modular choices: preconditioning, noise distribution, loss weighting, discretization, and a second-order sampler.</li>
+          <li>For Boltzmann data the score is the force field \(-\beta\nabla U\); the partition function drops out. Reverse diffusion is annealing.</li>
+          <li>3D molecular generation needs an equivariant denoiser, run in the zero-center-of-geometry subspace, so the model is invariant by construction.</li>
+          <li>Diffusion's path is a fixed, curved choice. Week 3 chooses the path directly and learns a velocity, which is what makes sampling fast.</li>
+        </ul>
+      </section>
+
+      <div class="nextprev">
+        <a href="../week2.html">← Week 2 overview</a>
+        <a href="problem-1.html">Start the problems →</a>
+      </div>
+    </article>
+    <aside class="side" aria-label="Page contents">
+      <div class="side-title">On this page</div>
+      <a href="#from-flows">1. Flows to diffusions</a>
+      <a href="#forward">2. The forward process</a>
+      <a href="#reverse">3. Reverse SDE &amp; PF-ODE</a>
+      <a href="#dsm">4. Denoising score matching</a>
+      <a href="#edm">5. The EDM design space</a>
+      <a href="#force-field">6. The score is a force field</a>
+      <a href="#equivariance">7. Equivariant diffusion</a>
+      <a href="#ahead">8. Looking ahead</a>
+      <a href="#recap">9. Recap</a>
+    </aside>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">Built as a lightweight course site. These notes condense the readings and link out to the original papers.</div>
+</footer>
+<script src="../../assets/diffusion.js" defer></script>
+</body>
+</html>

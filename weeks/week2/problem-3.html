@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 2 Problem 3 - Generative Modeling Bootcamp</title>
+  <meta name="description" content="Train a denoising score model on the Muller-Brown free-energy surface, sample it with the reverse SDE and the probability-flow ODE, and test whether it recovers the right basin populations." />
+  <link rel="stylesheet" href="../../assets/style.css" />
+
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(', '\\)'], ['$', '$']],
+    displayMath: [['\\[', '\\]']]
+  },
+  svg: { fontCache: 'global' }
+};
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="wide">
+    <a class="brand" href="../../index.html">GenModel Bootcamp</a>
+    <nav class="navlinks" aria-label="Site">
+      <a href="../../index.html">Overview</a>
+      <a href="../../docs/syllabus.pdf">Syllabus</a>
+    </nav>
+    <nav class="weekstrip" aria-label="Weeks">
+      <span class="weekstrip-label">Week</span>
+      <a href="../week1.html">1</a><a href="../week2.html" class="active">2</a><a href="../week3.html">3</a><a href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
+    </nav>
+  </div>
+</nav>
+
+<header class="page">
+  <div class="wrap">
+    <div class="kicker">Week 2 · Problem 3 of 4</div>
+    <h1 class="title">Coding lab: score-based sampling of a molecular free-energy surface</h1>
+    <p class="subtitle">Train a denoising score model on the Müller-Brown surface, sample it two ways, and find out whether it gets the basin populations right, the question that actually matters for chemistry.</p>
+    <nav class="actions" aria-label="Problem navigation"><a class="action" href="../week2.html">Week 2 overview</a><a class="action" href="../../docs/syllabus.pdf">Syllabus</a></nav>
+  </div>
+</header>
+<main>
+
+<div class="wide">
+  <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week2.html">Week 2</a> / Problem 3</div>
+  <div class="problem-shell">
+    <article>
+      <div class="problem-meta"><span>coding + statistical mechanics</span><span>Week 2</span><span>selected assignment</span></div>
+      <div class="prereq">
+        <div class="prereq-col">
+          <strong>Concepts you need</strong>
+          <ul>
+            <li>The DSM objective and EDM preconditioning from Problems 1 and 2</li>
+            <li>The reverse SDE and probability-flow ODE you derived in Problem 1</li>
+            <li>A basic MCMC sampler (Metropolis-adjusted Langevin) for ground truth</li>
+            <li>A small MLP in PyTorch or JAX, conditioned on the noise level</li>
+            <li>The Week 1 ODE-solver scaffold (Euler/Heun), reused here for sampling</li>
+          </ul>
+        </div>
+        <div class="prereq-col">
+          <strong>If you get stuck</strong>
+          <ul>
+            <li><a href="https://yang-song.net/blog/2021/score/" target="_blank" rel="noopener">Yang Song's blog</a> has a minimal annotated training and sampling loop</li>
+            <li><a href="https://arxiv.org/abs/2206.00364" target="_blank" rel="noopener">EDM</a>, Algorithm 2 for the Heun sampler you will copy</li>
+            <li>The <a href="notes.html#reverse">live sampler</a> in the notes is the exact-score version of what you are training toward</li>
+            <li><a href="https://en.wikipedia.org/wiki/Metropolis-adjusted_Langevin_algorithm" target="_blank" rel="noopener">MALA</a> for the ground-truth sampler</li>
+          </ul>
+        </div>
+      </div>
+      <div class="source-note"><strong>Source note.</strong> Original lab. The Müller-Brown surface is the standard chemistry test potential (<a href="https://doi.org/10.1007/BF00547608" target="_blank" rel="noopener">Müller &amp; Brown, 1979</a>); the training and sampling follow <a href="https://arxiv.org/abs/2011.13456" target="_blank" rel="noopener">Song et al. (2021)</a> and <a href="https://arxiv.org/abs/2206.00364" target="_blank" rel="noopener">Karras et al. (2022)</a>.</div>
+
+<p>This lab trains a real diffusion model, just on a two-dimensional target chosen so you can see everything. The <strong>Müller-Brown potential</strong> is the classic chemistry test surface: three basins separated by curved barriers, a stand-in for a molecular free-energy landscape over a pair of collective variables. Its Boltzmann distribution \(p(x)\propto e^{-V(x)/k_BT}\) is multimodal, the basins have genuinely different depths, and the barriers make the modes hard to cross, exactly the structure that breaks naive samplers. You will learn its score from data and test whether the generator reproduces not just the basin shapes but their relative populations.</p>
+<figure class="fig"><img src="../../assets/figures/w2p3.png" alt="Left, the Muller-Brown potential energy surface as a filled contour plot with three labeled basins and curved barriers. Right, target Boltzmann samples concentrated in the three basins, with the deepest basin most populated." loading="lazy" /><figcaption>The target. The Müller-Brown surface has three basins of different depth (left); the Boltzmann distribution \(p\propto e^{-V/k_BT}\) places different mass in each (right). A good generator must match these weights, not just land in valid basins.</figcaption></figure>
+<p>The live sampler below is the answer key: it runs the exact reverse process for a clean multi-well target. Your trained model should reproduce this behavior on the Müller-Brown surface, including the deterministic-versus-stochastic difference.</p>
+<div class="playground" id="diffusion-playground">
+  <noscript><p style="padding:12px">The interactive demo requires JavaScript. The static figure above shows the target distribution.</p></noscript>
+</div>
+<p class="pg-caption">Reverse diffusion on a multi-well target with the exact score. Toggle the probability-flow ODE against the reverse SDE; both land on the same basins. Your trained score model is an approximation of the field driving this.</p>
+<div class="note"><p><strong>Read the trajectories correctly.</strong> The reverse SDE and the probability-flow ODE reproduce the same one-time marginals <em>only</em> with the exact score and exact integration, and even then their path laws differ. Neither path is a physical trajectory: a smooth ODE path that crosses between basins is not a reaction mechanism, and a noisy SDE path is not a Langevin trajectory of the system. They are artificial probability-transport paths. Likewise, a trained generator amortizes barrier crossing at <em>generation</em> time, but only because the basins and their weights were already present in the training data; it does not solve the rare-event <em>data-acquisition</em> problem, and an entire basin missing from training will be missing from samples.</p></div>
+<p>Implement a small set of functions with clean interfaces. Because the target is 2D and known, the reference is exact quadrature, not another sampler.</p>
+<pre class="code">muller_brown(xy)                       # potential V(x, y), vectorized
+grid_normalize(kT, box, n)            # exact Z and p(x) on a grid (quadrature)
+basin_assign(xy)                      # watershed / polygon basin label
+exact_basin_weights(kT, grid)         # integrate p over each basin
+grid_sample(n, grid, rng)             # ~IID reference draws from the grid pmf
+mala_sample(n, kT, steps)             # an imperfect physical sampler, for comparison
+oracle_score(grid, sigma)             # FFT-smoothed p_sigma, then grad log p_sigma
+edm_precond(sigma, sigma_data)        # c_skip, c_out, c_in, c_noise
+dsm_loss(model, x0_batch, sigma)      # denoising score-matching loss
+heun_pf_ode(model, x_T, sigmas)       # deterministic sampler
+reverse_sde(model, x_T, sigmas)       # stochastic sampler</pre>
+<ol class="parts">
+<li><strong>Exact reference by quadrature.</strong> Because the target is two-dimensional and known, do not settle for a sampler as the reference. Normalize \(e^{-V/k_BT}\) on a sufficiently large, fine grid to get \(Z\) and \(p(x)\) directly, at a temperature where all three basins are populated (start near \(k_BT\approx 20\)-\(25\) in the standard units). Check that the probability leaking past the grid boundary is negligible. Define the three basins by a fixed assignment (steepest-descent/watershed or specified polygons), integrate the exact basin weights, and draw approximately IID reference samples from the normalized grid. These exact weights are the answer key for everything below.</li>
+<li><strong>MALA as an imperfect sampler.</strong> Now run Metropolis-adjusted Langevin as an intentionally imperfect <em>physical</em> sampler: several independent chains. Compare its estimated basin weights, effective sample size, and chain-to-chain variance against the exact quadrature from part 1. This makes the rare-event/mixing problem the lesson, rather than an uncertain answer key, and shows why a generator that amortizes sampling is attractive in the first place.</li>
+<li><strong>An oracle noisy score.</strong> At a few noise levels \(\sigma\), compute the smoothed density \(p_\sigma = p_0 * \mathcal N(0,\sigma^2 I)\) on the grid with a padded FFT convolution, then form \(s_\sigma(x)=\nabla\log p_\sigma(x)\) by finite differences of \(\log p_\sigma\). This is a near-exact target for the learned score at every noise level, far better than a KDE, and you will use it as the yardstick in part 4 and the controlled experiment in part 7.</li>
+<li><strong>Train the score model.</strong> Using the grid reference samples as data, implement the EDM-preconditioned denoiser \(D_\theta(x,\sigma)\) from Problem 2 with a small MLP for \(F_\theta\) (two or three hidden layers), sampling \(\ln\sigma\sim\mathcal N(-1.2,1.2^2)\) per minibatch, and train with the denoising loss. Plot the training loss and, at a few fixed \(\sigma\), compare the learned score field \((D_\theta-x)/\sigma^2\) to the oracle score from part 3 on a grid.</li>
+<li><strong>Sample two ways.</strong> Generate samples with the Heun probability-flow ODE and with the reverse SDE, reusing your Week 1 solver scaffold for the deterministic one. Overlay both on the contour plot. Confirm that both populate the three basins, the SDE paths noisier and the ODE paths smooth, while remembering (see the note above) that these paths are not physical trajectories.</li>
+<li><strong>Did it get the weights right?</strong> This is the real test. Compute the basin populations of your generated samples and compare them to the <em>exact</em> weights from part 1, with error bars. Convert to free-energy differences \(\Delta F_{ij}=-k_BT\ln(p_i/p_j)\) and report the error in \(\Delta F\). A model can put every sample in a valid basin and still get \(\Delta F\) wrong by \(k_BT\); check whether yours does.</li>
+<li><strong>Break it, then explain it.</strong> With the oracle score from part 3 in hand, the failure becomes identifiable rather than speculative. Run the matrix: (a) exact score + fine sampler, the reference; (b) exact score + coarse sampler, isolating discretization error; (c) learned score + fine sampler, isolating model/score error; (d) deliberately biased or mode-missing training data, isolating data-coverage error; (e) a truncated Gaussian initialization at \(\sigma_{\max}\), isolating prior-truncation error. Shrink the training set or lower the temperature until the populations come out clearly wrong, then attribute the error to one of these sources and tie it to the annealed-Langevin argument in Song &amp; Ermon.</li>
+<li><strong>Sampler cost.</strong> Plot a sample-quality metric (population error or an energy-distance to the reference) against the number of <em>network function evaluations</em>, not nominal steps, so the second-order Heun sampler is compared fairly against Euler. Average the stochastic-sampler metric over several random seeds. Identify the smallest budget that gets the populations within error, and relate the curve to the sampler argument in Problem 2.</li>
+<li><strong>Temperature conditioning (optional).</strong> Make the temperature a conditioning input: train on data from several \(k_BT\) and condition \(F_\theta\) on it, then generate at an unseen temperature and compare to a fresh exact-quadrature reference. This is a tiny instance of the conditional Boltzmann generators that Weeks 5 and 9 return to.</li>
+</ol>
+<div class="deliverable"><strong>Deliverable.</strong> A short notebook producing the exact quadrature reference and basin weights, the learned-versus-oracle score comparison, samples from both samplers overlaid on the surface, a basin-population and \(\Delta F\) table against the exact weights, and a paragraph attributing one regime of wrong populations to a specific error source. Reuse the Week 1 solver scaffold for the deterministic sampler.</div>
+<div class="why"><strong>Why this matters.</strong> Validity is easy and weights are hard. Every generative-for-chemistry result eventually runs into the fact that a model can produce only valid-looking samples while misjudging which states are actually populated, and a 2D surface is where you can measure that failure exactly before it hides inside a 3D molecular model.</div>
+
+      <div class="pager"><a href="problem-2.html">← Problem 2: The EDM design space</a><a href="problem-4.html">Problem 4: Equivariant diffusion for 3D molecular structures →</a></div>
+    </article>
+    <aside class="problem-nav" aria-label="Week 2 problem navigation">
+      <a href="notes.html">Lecture notes</a>
+      <strong>Week 2 problems</strong>
+      <a href="problem-1.html">Problem 1: From Boltzmann distributions to denoising score matching</a><a href="problem-2.html">Problem 2: The EDM design space: preconditioning, schedules, and weighting</a><a class="current" href="problem-3.html">Problem 3: Coding lab: score-based sampling of a molecular free-energy surface</a><a href="problem-4.html">Problem 4: Coding lab: equivariant diffusion for 3D molecular structures</a>
+    </aside>
+  </div>
+</div>
+
+</main>
+<footer>
+  <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes remain the primary source material.</div>
+</footer>
+<script src="../../assets/diffusion.js" defer></script>
+</body>
+</html>

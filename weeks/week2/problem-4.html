@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 2 Problem 4 - Generative Modeling Bootcamp</title>
+  <meta name="description" content="Build a miniature equivariant diffusion model for 3D molecular structures: the zero-center-of-geometry subspace, an E(n)-equivariant denoiser, and an invariant generated distribution." />
+  <link rel="stylesheet" href="../../assets/style.css" />
+
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(', '\\)'], ['$', '$']],
+    displayMath: [['\\[', '\\]']]
+  },
+  svg: { fontCache: 'global' }
+};
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="wide">
+    <a class="brand" href="../../index.html">GenModel Bootcamp</a>
+    <nav class="navlinks" aria-label="Site">
+      <a href="../../index.html">Overview</a>
+      <a href="../../docs/syllabus.pdf">Syllabus</a>
+    </nav>
+    <nav class="weekstrip" aria-label="Weeks">
+      <span class="weekstrip-label">Week</span>
+      <a href="../week1.html">1</a><a href="../week2.html" class="active">2</a><a href="../week3.html">3</a><a href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
+    </nav>
+  </div>
+</nav>
+
+<header class="page">
+  <div class="wrap">
+    <div class="kicker">Week 2 · Problem 4 of 4</div>
+    <h1 class="title">Coding lab: equivariant diffusion for 3D molecular structures</h1>
+    <p class="subtitle">Build a Karras-preconditioned equivariant coordinate diffusion model, inspired by E(3)-EDM and GeoDiff: diffuse 3D coordinates in the zero-center-of-geometry subspace with an equivariant denoiser, and verify the generated distribution is rotation-invariant by construction.</p>
+    <nav class="actions" aria-label="Problem navigation"><a class="action" href="../week2.html">Week 2 overview</a><a class="action" href="../../docs/syllabus.pdf">Syllabus</a></nav>
+  </div>
+</header>
+<main>
+
+<div class="wide">
+  <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week2.html">Week 2</a> / Problem 4</div>
+  <div class="problem-shell">
+    <article>
+      <div class="problem-meta"><span>coding + geometry</span><span>Week 2</span><span>selected assignment</span></div>
+      <div class="prereq">
+        <div class="prereq-col">
+          <strong>Concepts you need</strong>
+          <ul>
+            <li>Invariance vs equivariance, and the invariant-base / equivariant-map argument (Week 1, Problems 1 and 6)</li>
+            <li>The diffusion training and sampling loop from Problem 3</li>
+            <li>One message-passing step on a graph; the E(n)-equivariant update rule</li>
+            <li>Center of geometry (arithmetic mean) and the zero-CoG linear subspace</li>
+            <li>RDKit for generating a small 3D conformer dataset (or a provided one)</li>
+          </ul>
+        </div>
+        <div class="prereq-col">
+          <strong>If you get stuck</strong>
+          <ul>
+            <li><a href="https://arxiv.org/abs/2203.17003" target="_blank" rel="noopener">Hoogeboom et al. (molecular EDM)</a>, Sections 3 and 4 for the zero-CoG subspace and the equivariant denoiser</li>
+            <li><a href="https://arxiv.org/abs/2102.09844" target="_blank" rel="noopener">Satorras et al., E(n) Equivariant Graph Neural Networks</a> for the exact update equations</li>
+            <li><a href="https://arxiv.org/abs/2203.02923" target="_blank" rel="noopener">GeoDiff</a> for the fixed-graph, coordinates-only variant</li>
+            <li>Week 1 <a href="../week1/problem-6.html">Problem 6</a> for the equivariance sanity checks you reuse</li>
+          </ul>
+        </div>
+      </div>
+      <div class="source-note"><strong>Source note.</strong> Original lab. It is a deliberate hybrid: the <a href="https://arxiv.org/abs/2102.09844" target="_blank" rel="noopener">EGNN</a> architecture and zero-center-of-geometry construction of <a href="https://arxiv.org/abs/2203.17003" target="_blank" rel="noopener">Hoogeboom et al. (2022)</a> with the Karras preconditioning of Problem 2, in the fixed-graph coordinates-only setting of <a href="https://arxiv.org/abs/2203.02923" target="_blank" rel="noopener">GeoDiff</a>. Sanity checks from Week 1 Problem 6.</div>
+
+      <div class="note"><p><strong>Terminology: two "EDM"s.</strong> <em>Karras-EDM</em> (<a href="https://arxiv.org/abs/2206.00364" target="_blank" rel="noopener">2206.00364</a>) is the preconditioned-denoiser design space of Problem 2. <em>E(3)-EDM</em> (<a href="https://arxiv.org/abs/2203.17003" target="_blank" rel="noopener">2203.17003</a>) is Hoogeboom et al.'s equivariant <em>molecule</em> model, which originally uses a VP-style diffusion, predicts the noise with an EGNN, and projects its coordinate output into the zero-center-of-geometry subspace. What you build here is not a literal reimplementation of E(3)-EDM; it is a Karras-preconditioned equivariant coordinate diffusion model that borrows E(3)-EDM's geometry and GeoDiff's fixed-graph setup. That hybrid is sensible and simpler to train, but say plainly which pieces come from where.</p></div>
+
+<p>Problem 3 trained a diffusion model where the state was an unstructured vector. Real molecules are not unstructured: a configuration is a set of atoms in 3D, and a distribution over configurations must not care how you rotate or translate the whole thing, or how you order the atoms. This lab builds the smallest model that respects all of that, the equivariant diffusion model, on a tiny dataset you can train on a laptop. The point is to see exactly why equivariance is an architectural choice and what the zero-center-of-geometry subspace is doing.</p>
+<figure class="fig"><img src="../../assets/figures/w2p4.png" alt="Left, a noisy 3D point cloud denoised step by step into a ring-shaped molecule. Right, an equivariance commuting square: denoising a rotated input lands on the same points as rotating the denoised output." loading="lazy" /><figcaption>What you are building. Reverse diffusion turns a Gaussian point cloud into a molecule (left). The denoiser is equivariant, \(D(Qx)=Q\,D(x)\) (right), so an invariant prior gives an invariant generated distribution, no data augmentation required.</figcaption></figure>
+<p>Implement a small set of functions with clean interfaces.</p>
+<pre class="code">load_dataset(name, n)                 # 3D coords (+ types) for one small molecule
+zero_cog(x)                           # subtract arithmetic mean (center of geometry)
+egnn_denoiser(x, h, sigma)            # E(n)-equivariant D_theta on coords x, features h
+equiv_error_rot(model, x)             # ||D(Qx) - Q D(x)|| on centered inputs, random Q
+generate(model, z, sigmas)            # deterministic map from a fixed prior cloud z
+internal_validation(samples, graph)   # bond, angle, torsion, clash distributions
+net_force_torque(score, x)            # sum_i s_i and sum_i x_i x s_i (should vanish)</pre>
+<ol class="parts">
+<li><strong>State space and the zero-CoG subspace.</strong> Take one small <em>achiral</em> molecule (ethanol is a good default) and build a dataset of a few thousand conformers, either with RDKit or, for a cleaner physics version, by MCMC-sampling a butane-like four-bead toy with a known bond/angle/torsion energy (this connects directly to the length-scale discussion of Problem 2). Describe the RDKit set honestly as an <em>empirical</em> conformer ensemble, not automatically a canonical Boltzmann ensemble. Center every configuration by subtracting the arithmetic mean of the coordinates, the center of geometry \(\sum_i x_i=0\) used by E(3)-EDM, not the mass-weighted center of mass. Explain why a nonzero <em>translation-invariant</em> density over unconstrained absolute coordinates cannot be normalized (every translated copy has the same density), and why projecting onto the \(3(n-1)\)-dimensional zero-CoG subspace fixes this. Sample your Gaussian prior <em>in that subspace</em>.</li>
+<li><strong>An equivariant denoiser, and the right transformation law.</strong> Implement a minimal E(n)-equivariant graph network as \(D_\theta\): coordinates update along relative directions, \(x_i \leftarrow x_i + \sum_{j\neq i}(x_i-x_j)\,\phi\big(\|x_i-x_j\|^2,h_i,h_j\big)\), scalar features \(h_i\) from invariant messages, conditioned on \(\sigma\). First get the transformation law right. A position-valued denoiser obeys \(D(Qx+\mathbf 1 t^\top)=Q D(x)+\mathbf 1 t^\top\), whereas a centered score- or noise-valued output obeys \(s(Qx+\mathbf 1 t^\top)=Q s(x)\) because it is a zero-mean displacement field. Since you run everything projected into the zero-CoG subspace, translations are no longer transformations within the state space, so test rotations, reflections, and permutations on <em>centered</em> inputs (or, if you want to test translation too, define \(D_{\mathrm{full}}(x)=\bar x + D_{\mathrm{centered}}(x-\bar x)\)). Verify <code>equiv_error_rot</code> is at floating-point level; contrast with a plain MLP on flattened coordinates, whose error is order one.</li>
+<li><strong>Reflections and chirality.</strong> An EGNN built from distances is equivariant not only to rotations and translations but also to <em>reflections</em> and node permutations, so it realizes \(E(3)/O(3)\), not \(SE(3)\). Verify this: your <code>equiv_error_rot</code> stays tiny even for \(Q\) with \(\det Q=-1\). Explain the consequence, an \(O(3)\)-invariant generative model treats a molecule and its mirror image as equiprobable, which is harmless for achiral ethanol but wrong for a stereochemically fixed chiral molecule such as alanine dipeptide. State what extra ingredient (a chirality-sensitive, reflection-<em>odd</em> feature, i.e. reducing the group to \(SE(3)\)) would be needed, and why this lab uses an achiral molecule.</li>
+<li><strong>Train.</strong> Reuse the EDM-preconditioned denoising loss from Problem 3, projecting both the added noise and the denoiser output onto the zero-CoG subspace so the dynamics never leave it. Train, plot the loss, and confirm the equivariance error stays negligible throughout.</li>
+<li><strong>Generate and validate beyond bonds.</strong> Sample new conformers with the Heun probability-flow ODE in the zero-CoG subspace. Keep the bonded graph fixed and diffuse only coordinates (the GeoDiff setting) so "validity" is well defined. Validate physically with at least one nonlocal quantity in addition to bond lengths and angles: the torsion-angle distribution, a nonbonded clash rate or pairwise-distance-matrix statistic, or a signed-volume/chirality diagnostic. Report how many samples have all bonds within tolerance and whether the torsion populations match the data.</li>
+<li><strong>Invariance, tested pathwise.</strong> Demonstrate the payoff of equivariance without retraining. For the deterministic sampler, show \(G(Qz)=Q\,G(z)\) on the <em>same</em> initial Gaussian cloud \(z\) (for a stochastic sampler, rotate the initial state and every Gaussian increment together); conclude that the distribution of any rotation-invariant observable is exactly invariant, the GeoDiff construction of an equivariant transition kernel on an invariant prior. As an additional exact-symmetry diagnostic, prove and check that for the exact score of a translation- and rotation-invariant density the net score-force and score-torque vanish, \(\sum_i s_i(x)=0\) and \(\sum_i x_i\times s_i(x)=0\); these are concrete "zero net force / zero net torque" checks a physicist will recognize.</li>
+<li><strong>Toward the real models.</strong> Write a short paragraph on two extensions you did <em>not</em> implement. (a) Atom types: E(3)-EDM diffuses a continuous relaxation of discrete types jointly with coordinates; explain the scale-mismatch issue from Problem 2 that the differing natural scales of types and coordinates raise. (b) Periodicity: a crystal is not just "rotation and translation replaced by a space group." It adds coordinates taken modulo lattice translations, periodic neighbor images with minimum-image geometry, a variable lattice/cell, non-uniqueness under change of lattice basis, and possibly a material-specific space group. State concretely what fails if a nonperiodic molecular denoiser is applied unchanged: distances across cell boundaries are wrong, wrapped coordinates are discontinuous, the lattice is absent, and equivalent cell representations need not get equivalent predictions. (Weeks 10 and 11 are these in full.)</li>
+</ol>
+<div class="deliverable"><strong>Deliverable.</strong> A short notebook with the numerical equivariance check (equivariant vs plain network, including a reflection), the training curve, generated conformers with bond, angle, and torsion distributions overlaid on the data, and the pathwise invariance test \(G(Qz)=Q\,G(z)\) with the net score-force/torque check. A short note placing your hybrid relative to E(3)-EDM and GeoDiff and listing what atom types and periodicity would add.</div>
+<div class="why"><strong>Why this matters.</strong> This is the smallest complete instance of the model class that dominates the second half of the course. Once you have built an equivariant denoiser in the zero-CoG subspace and watched the generated distribution inherit invariance for free, EDM-molecules, GeoDiff, TargetDiff, and the crystal models of Week 11 read as variations on a structure you already own.</div>
+
+      <div class="pager"><a href="problem-3.html">← Problem 3: Score-based sampling of a molecular free-energy surface</a><a href="../week3.html">Week 3: Flow matching and scalable generators →</a></div>
+    </article>
+    <aside class="problem-nav" aria-label="Week 2 problem navigation">
+      <a href="notes.html">Lecture notes</a>
+      <strong>Week 2 problems</strong>
+      <a href="problem-1.html">Problem 1: From Boltzmann distributions to denoising score matching</a><a href="problem-2.html">Problem 2: The EDM design space: preconditioning, schedules, and weighting</a><a href="problem-3.html">Problem 3: Coding lab: score-based sampling of a molecular free-energy surface</a><a class="current" href="problem-4.html">Problem 4: Coding lab: equivariant diffusion for 3D molecular structures</a>
+    </aside>
+  </div>
+</div>
+
+</main>
+<footer>
+  <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes remain the primary source material.</div>
+</footer>
+</body>
+</html>

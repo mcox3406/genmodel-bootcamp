@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 2: Diffusion, score models, and modern design space</title>
+  <meta name="description"
+    content="Stochastic transport: forward noising SDEs, reverse-time SDEs, the probability-flow ODE, denoising score matching, the EDM design space, and equivariant diffusion for 3D molecules." />
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)'], ['$', '$']],
+        displayMath: [['\\[', '\\]']]
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+
+<body>
+  <nav class="topbar">
+    <div class="wide">
+      <a class="brand" href="../index.html">GenModel Bootcamp</a>
+      <nav class="navlinks" aria-label="Site">
+        <a href="../index.html">Overview</a>
+        <a href="../docs/syllabus.pdf">Syllabus</a>
+      </nav>
+      <nav class="weekstrip" aria-label="Weeks">
+        <span class="weekstrip-label">Week</span>
+        <a href="week1.html">1</a><a href="week2.html" class="active">2</a><a href="week3.html">3</a><a
+          href="week4.html">4</a><a href="week5.html">5</a><a href="week6.html">6</a><a href="week7.html">7</a><a
+          href="week8.html">8</a><a href="week9.html">9</a><a href="week10.html">10</a><a href="week11.html">11</a><a
+          href="week12.html">12</a>
+      </nav>
+    </div>
+  </nav>
+
+  <header class="page">
+    <div class="wrap">
+      <div class="kicker">Week 2 of 12 · foundations</div>
+      <h1 class="title">Diffusion, score models, and modern design space</h1>
+      <p class="subtitle">Keep the differential-equation view from Week 1 and add one ingredient, noise. A forward
+        process moves data toward a tractable Gaussian prior; the model learns the score and runs the process backward.
+      </p>
+      <div class="meta"><span>methods + applications</span><span>derivation session</span><span>coding lab</span><span>4
+          problems</span></div>
+      <nav class="actions" aria-label="Week navigation">
+        <a class="action primary" href="week2/notes.html">Lecture notes</a>
+        <a class="action" href="#problems">Jump to problems</a>
+        <a class="action" href="week3.html">Week 3 →</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <div class="wide page-layout">
+      <article>
+        <section id="orientation">
+          <h2><span class="num">1</span>Orientation</h2>
+          <p class="lede">Forward noising processes, the score function, reverse-time SDEs, the probability-flow ODE,
+            denoising score matching, and the EDM design space that makes all of it train. Then the same machinery on 3D
+            molecules, where the score is an equivariant force field.</p>
+          <figure class="fig"><img src="../assets/figures/w2-overview.png"
+              alt="Three panels: a molecule-like data distribution dissolving into a Gaussian under added noise, the score field of an intermediate noised density pointing back toward the data modes, and reverse trajectories denoising noise back into the three modes."
+              loading="lazy" />
+            <figcaption>The three objects that carry the week, on a molecule-like target. A fixed <strong>forward
+                process</strong> blurs the data toward a Gaussian prior (left). At each noise level the model learns the
+              <strong>score</strong> \(\nabla_x\log p_t(x)\), the gradient of the noised log-density (center). Combined
+              with the known forward dynamics, that score gives either a reverse-time SDE or a deterministic
+              probability-flow ODE; shown at right is the probability-flow ODE carrying noise onto the three modes.
+            </figcaption>
+          </figure>
+          <p>Week 1 built generation as deterministic transport: a velocity field, its flow map, and the continuity
+            equation that moves density along it. Week 2 keeps every piece of that picture and adds stochasticity. Fix a
+            <strong>forward process</strong> that gradually corrupts a data point with Gaussian noise until, at the
+            final time, almost nothing of the data is left and the distribution is close to a standard Gaussian you can
+            sample trivially. Diffusion is what you get by learning to undo that corruption. Remarkably, the time
+            reversal of a noising diffusion is itself a diffusion, and the single missing quantity needed to run it
+            backward is the <strong>score</strong> \(\nabla_x\log p_t(x)\), the gradient of the log-density of the
+            noised data. The score is not itself the reverse velocity; it is the unknown field that, combined with the
+            known forward dynamics, builds the reverse velocity or the reverse stochastic drift. Everything else, ODE
+            integration, divergence, trajectory geometry, carries straight over from Week 1.</p>
+          <p>Two facts make this more than a reparameterization of Week 1. First, with the exact score, a correctly
+            initialized terminal law, and exact integration, the same forward process gives two reverse constructions: a
+            stochastic <strong>reverse-time SDE</strong> that re-injects noise at every step, and a fully deterministic
+            <strong>probability-flow ODE</strong>. They share the same one-time marginals, but their trajectories and
+            numerical-error properties differ, so the stochastic-versus-deterministic choice is an empirical,
+            solver-dependent tradeoff rather than a universal rule. Second, the score has a free training signal.
+            Standard training reduces to a tractable denoising regression that needs neither likelihood evaluation nor a
+            reverse solver in the loop: corrupt a clean sample with known noise and regress the network onto the
+            posterior-mean denoising direction. At the population optimum this recovers the conditional mean of the
+            noise given the noised sample, which is algebraically the marginal score; it does not recover the particular
+            noise draw. (In DDPM this regression is motivated by a decomposition of the variational bound, with the
+            commonly used simplified loss changing its weighting.) This is the smoothing idea from Week 1 Problem 1, now
+            load-bearing.</p>
+          <p>Why this matters for science is unusually direct here. If the data distribution is a Boltzmann distribution
+            \(p \propto e^{-\beta_{\mathrm{phys}} U(x)}\) over full Cartesian molecular configurations, then the
+            clean-data score is, up to inverse temperature \(\beta_{\mathrm{phys}}\), the physical <strong>force
+              field</strong> \(-\nabla U\). The correspondence is exact only at zero noise and in full Cartesian
+            coordinates: at \(t>0\) the learned score is the gradient of a <em>smoothed</em> effective density, and in
+            internal or coarse-grained coordinates it becomes a mean force carrying Jacobian and entropic terms. Forward
+            noising as heating and reverse generation as annealing are distributional analogies, not physical
+            temperature protocols, and a model trained on equilibrium snapshots targets equilibrium statistics, not
+            molecular kinetics or transition rates. Even so, a diffusion model is an amortized sampler for an energy
+            landscape, and the questions that haunt molecular simulation, multimodality, rare basins and their relative
+            statistical weights, are exactly the questions that decide whether the generator is any good. The problems
+            this week are built on that correspondence, from the Müller-Brown surface to equivariant generation of 3D
+            structures.</p>
+          <div class="note">
+            <p>One naming collision to fix up front. <strong>EDM</strong> means two different papers this week. Karras
+              et al. (2022), <em>Elucidating the Design Space</em>, is the image-side framework for preconditioning,
+              schedules, and sampler design. Hoogeboom et al. (2022), <em>Equivariant Diffusion for Molecule
+                Generation</em>, is the 3D-molecule model. Both appear below; the pages always disambiguate which one is
+              meant.</p>
+          </div>
+        </section>
+        <section id="goals">
+          <h2><span class="num">2</span>Learning goals</h2>
+          <ul>
+            <li>Write down a forward noising SDE and its perturbation kernel, and state how the score builds the
+              reverse-time SDE and the probability-flow ODE that undo it.</li>
+            <li>Derive the denoising score matching objective and show that at the population optimum it recovers the
+              conditional mean of the noise \(\mathbb E[\epsilon\mid x_t]\), a fixed rescaling \(\nabla_x\log p_t =
+              -\mathbb E[\epsilon\mid x_t]/\sigma_t\) of the marginal score.</li>
+            <li>Read the EDM design space as conceptually separable, largely modular design choices, preconditioning,
+              noise distribution, loss weighting, discretization, and sampler, whose best settings can still interact.
+            </li>
+            <li>Interpret the clean-data score of a Boltzmann distribution as a force field (and the noised score as a
+              smoothed mean force), and reason about why multimodality and basin weights are the hard part for molecules
+              and materials.</li>
+            <li>Explain why a molecular coordinate score should be equivariant under atom permutations and the chosen
+              rigid-motion group; distinguish \(E(3)\) from \(SE(3)\); and explain how the zero-center-of-geometry
+              subspace removes the global translation gauge.</li>
+          </ul>
+        </section>
+        <section id="readings">
+          <h2><span class="num">3</span>Methods readings</h2>
+          <p>Read roughly in order, these trace one idea from its origins to the framework that makes it train at scale.
+            Hyvärinen's score matching supplies the objective that sidesteps the unknown normalizing constant;
+            Sohl-Dickstein frames generation as reversing a diffusion. DDPM turns that into a practical denoising
+            regression and the model that started the modern wave, while NCSN arrives at the same place from score
+            matching and annealed Langevin. The score-SDE paper is the hinge: it places both in one common framework, as
+            the variance-preserving (VP) and variance-exploding (VE) SDEs, and hands you Anderson's reverse-time SDE and
+            the probability-flow ODE. EDM then lays out the surrounding design choices directly, and DDIM isolates the
+            deterministic-sampling idea. Aim to reproduce the reverse-time and probability-flow identities and to see
+            DDPM and NCSN as different choices of probability path, parameterization, weighting, and sampler within one
+            continuous-noise design space, rather than to memorize each schedule. The <a href="week2/notes.html">lecture
+              notes</a> distill all of this into one place, with figures and a live sampler. Section pointers below
+            follow each paper's own numbering.</p>
+          <div class="reading-list">
+            <div class="reading">
+              <span class="label">Core notes</span>
+              <div class="title"><a href="https://diffusion.csail.mit.edu/2026/docs/lecture_notes.pdf" target="_blank"
+                  rel="noopener">Holderrieth &amp; Erives, An Introduction to Flow Matching and Diffusion Models (MIT
+                  6.S184), §2.2 and §§4.1-4.3 (Appendix B optional)</a></div>
+              <p class="desc">Continues the single source of notation from Week 1 into stochastic processes: §2.2 builds
+                the diffusion models, §4.1 the conditional and marginal score functions, §4.2 sampling with SDEs, and
+                §4.3 score matching, with Appendix B the optional Fokker-Planck proof. Note the convention: time runs
+                from \(t=0\) at the noise end to \(t=1\) at the data end, so for the conventional data-to-noise
+                reverse-time formula, Score-SDE §3.2 is the cleaner source.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Score-matching origin · 2005</span>
+              <div class="title"><a href="https://www.jmlr.org/papers/volume6/hyvarinen05a/hyvarinen05a.pdf"
+                  target="_blank" rel="noopener">Hyvärinen, Estimation of Non-Normalized Statistical Models by Score
+                  Matching</a></div>
+              <p class="desc">The foundational objective, worth reading before NCSN. §§1-2 derive the
+                integration-by-parts trick that eliminates both the unknown data score and the normalizing constant,
+                leaving a tractable loss. Everything called "score matching" later is a practical descendant of this one
+                identity.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Origins · 2015 (short skim)</span>
+              <div class="title"><a href="https://arxiv.org/abs/1503.03585" target="_blank"
+                  rel="noopener">Sohl-Dickstein et al., Deep Unsupervised Learning using Nonequilibrium
+                  Thermodynamics</a></div>
+              <p class="desc">Where the idea begins: generation as the learned reversal of a diffusion. A short
+                historical skim of §1.1 and §§2.1-2.4 (forward trajectory, reverse trajectory, model probability,
+                training) is enough to see DDPM's lineage.</p>
+            </div>
+            <div class="reading">
+              <span class="label">The workhorse · 2020</span>
+              <div class="title"><a href="https://arxiv.org/abs/2006.11239" target="_blank" rel="noopener">Ho, Jain
+                  &amp; Abbeel, Denoising Diffusion Probabilistic Models (DDPM)</a></div>
+              <p class="desc">The paper that made diffusion work. A fixed Gaussian forward chain, a variational bound
+                that collapses to a clean denoising regression, and the widely used \(\epsilon\)-prediction
+                parameterization. Read §2 and §§3.1-3.4 with Algorithms 1-2 for the closed-form forward marginal
+                \(q(x_t\mid x_0)\), the reverse parameterization, the variational decomposition, the simplified
+                objective, and training and sampling. Note that the simplified loss deliberately changes the variational
+                weighting.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Score viewpoint · 2019</span>
+              <div class="title"><a href="https://arxiv.org/abs/1907.05600" target="_blank" rel="noopener">Song &amp;
+                  Ermon, Generative Modeling by Estimating Gradients of the Data Distribution (NCSN)</a></div>
+              <p class="desc">The other road to the same destination. Estimate the score at many noise levels with
+                denoising score matching, then sample with annealed Langevin dynamics. Read §§2.1-2.2 (score matching
+                and Langevin), §§3.1-3.2 (the manifold and low-density difficulties), and §§4.1-4.3 (the networks,
+                training, and annealed Langevin). The key point: with manifold-like or poorly smoothed data, score
+                estimation is unreliable in low-density regions and single-scale Langevin mixes very slowly, and a
+                ladder of noise levels fixes both estimation and exploration.</p>
+            </div>
+            <div class="reading">
+              <span class="label">The hinge · 2021</span>
+              <div class="title"><a href="https://arxiv.org/abs/2011.13456" target="_blank" rel="noopener">Song et al.,
+                  Score-Based Generative Modeling through Stochastic Differential Equations</a></div>
+              <p class="desc">The unification. The continuous limits of DDPM and SMLD/NCSN become the VP and VE SDEs
+                within one common framework, and Anderson's reverse-time SDE plus the probability-flow ODE fall out as
+                the two ways to integrate it backward. Read §§2.1-2.2 (SMLD and DDPM), §3.1 (forward perturbation), §3.2
+                (reverse-time SDE), §3.3 (score estimation), §3.4 (VE/VP/sub-VP), and §§4.1-4.3 (solvers,
+                predictor-corrector, probability-flow ODE and likelihood). The central paper of the week; reproduce the
+                reverse-time and probability-flow statements.</p>
+            </div>
+            <div class="reading">
+              <span class="label">The design space · 2022</span>
+              <div class="title"><a href="https://arxiv.org/abs/2206.00364" target="_blank" rel="noopener">Karras et
+                  al., Elucidating the Design Space of Diffusion-Based Generative Models (EDM)</a></div>
+              <p class="desc">The engineering that turned diffusion from finicky into reliable. Treats preconditioning,
+                the training noise distribution, loss weighting, time discretization, and the sampling algorithm as
+                conceptually separable, largely modular design choices, whose best settings can still interact. Read §2
+                (common framework), §3 (deterministic sampling), §4 (stochastic sampling), and §5 (preconditioning and
+                training). Problem 2 derives the preconditioning. Read it for the mindset: these are knobs tuned to the
+                data, not laws.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Deterministic sampling · 2021</span>
+              <div class="title"><a href="https://arxiv.org/abs/2010.02502" target="_blank" rel="noopener">Song et al.,
+                  Denoising Diffusion Implicit Models (DDIM)</a></div>
+              <p class="desc">Directly relevant to this week's deterministic-versus-stochastic theme. A non-Markovian
+                forward construction that shares DDPM's training objective but admits a fast, deterministic sampler with
+                an ODE interpretation. Read §§3.1-3.2 (the construction and shared objective) and §§4.1-4.3
+                (deterministic sampling, acceleration, and the ODE connection).</p>
+            </div>
+            <div class="reading">
+              <span class="label">Optional · refinements &amp; proofs</span>
+              <div class="title"><a href="https://arxiv.org/abs/2102.09672" target="_blank" rel="noopener">Nichol &amp;
+                  Dhariwal, Improved DDPM (2021)</a>, <a href="https://arxiv.org/abs/2312.02696" target="_blank"
+                  rel="noopener">Karras et al., EDM2 (2024; initial preprint 2023)</a>, and <a
+                  href="https://arxiv.org/abs/2402.07487" target="_blank" rel="noopener">Tang &amp; Zhao, Score-based
+                  diffusion via SDEs: a technical tutorial</a></div>
+              <p class="desc">The cosine schedule and learned variances (Improved DDPM, §§2-3); advanced
+                training-dynamics fixes such as magnitude-preserving layers and post-hoc EMA (EDM2,
+                architecture-focused, treat as advanced); and a proof-oriented textbook backup (Tang &amp; Zhao §2 time
+                reversal, §3 VE/VP examples, §4 score matching, §6 ODE samplers). Skim once the core papers are solid.
+              </p>
+            </div>
+            <div class="reading">
+              <span class="label">Background tutorials</span>
+              <div class="title"><a href="https://yang-song.net/blog/2021/score/" target="_blank" rel="noopener">Yang
+                  Song, Score-Based Generative Modeling</a> and <a
+                  href="https://lilianweng.github.io/posts/2021-07-11-diffusion-models/" target="_blank"
+                  rel="noopener">Lilian Weng, What are Diffusion Models?</a></div>
+              <p class="desc">Two careful blog walkthroughs. In Song's, read "Score function and score matching,"
+                "Langevin dynamics," "Pitfalls," "Multiple noise scales," then the SDE headings (perturbing data,
+                reversing the SDE, estimating scores, solving the reverse SDE, the probability-flow ODE). In Weng's,
+                read "Forward diffusion process," "Reverse diffusion process," "Parameterization of \(L_t\),"
+                "Simplification," and "Connection with NCSN." Good for filling gaps before the derivation session.</p>
+            </div>
+          </div>
+          <div class="note">
+            <p><strong>One dictionary: score, noise, and denoiser.</strong> With \(x_t=\alpha_t x_0+\sigma_t\epsilon\),
+              the three objects every paper trains are linear reparameterizations of one another:
+              \[ s_t(x_t)=-\frac{\mathbb E[\epsilon\mid x_t]}{\sigma_t}, \qquad D_t(x_t)=\mathbb E[x_0\mid
+              x_t]=\frac{x_t+\sigma_t^2\,s_t(x_t)}{\alpha_t}. \]
+              A model may predict the noise \(\epsilon\), the score \(s\), the clean data \(x_0\), or a preconditioned
+              denoiser \(D\); these are parameterization choices, not different generative principles. Keep this table
+              open while reading DDPM (\(\epsilon\)), NCSN and Score-SDE (\(s\)), and EDM (\(D\)).</p>
+          </div>
+        </section>
+        <section id="applications">
+          <h2><span class="num">4</span>Chemistry / materials application readings</h2>
+          <p>These take the clean theory onto real 3D structures, and the first lesson is that the <em>state space</em>
+            sets the model. The molecular EDM, GeoDiff, TargetDiff, DiffCSP, CDVAE, and MatterGen differ mainly in which
+            variables they diffuse and under which symmetries, not in the underlying Gaussian process. Start with the
+            EGNN prerequisite so the geometry and the diffusion do not have to be learned at once, then the molecular
+            models, then the periodic-materials ones. Carry one question throughout: what does it take for a diffusion
+            model to respect the symmetries of a physical object, and where does the score-as-force-field picture help
+            you reason about what it is learning?</p>
+          <div class="note">
+            <p><strong>State space determines the diffusion.</strong> Why these papers make different choices rather
+              than reimplementing one process:</p>
+            <ul>
+              <li>Cartesian coordinates: a centered Euclidean subspace, modulo rigid motions.</li>
+              <li>Torsions and fractional coordinates: periodic variables (a torus).</li>
+              <li>Atom types and bonds: categorical.</li>
+              <li>Crystal lattices: continuous matrices with rotational and basis symmetries.</li>
+              <li>Atom indices: a permutation symmetry, not a physical degree of freedom.</li>
+            </ul>
+          </div>
+          <div class="reading-list">
+            <div class="reading">
+              <span class="label">Prerequisite · equivariant GNNs</span>
+              <div class="title"><a href="https://arxiv.org/abs/2102.09844" target="_blank" rel="noopener">Satorras,
+                  Hoogeboom &amp; Welling, E(n) Equivariant Graph Neural Networks (EGNN)</a></div>
+              <p class="desc">Read this first; it is the architecture the molecular diffusion models are built on.
+                §§2.1-2.2 set up equivariance and graph networks, and §3 (with §3.1) gives the EGNN construction and its
+                symmetry analysis, including the distinction between \(E(3)\) (with reflections) and \(SE(3)\). With
+                this in hand, the molecular papers only have to explain the diffusion.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Equivariant 3D molecules</span>
+              <div class="title"><a href="https://arxiv.org/abs/2203.17003" target="_blank" rel="noopener">Hoogeboom et
+                  al., Equivariant Diffusion for Molecule Generation in 3D (the molecular EDM)</a></div>
+              <p class="desc">The reference equivariant diffusion model. An E(3)- and permutation-equivariant network
+                denoises atom coordinates and a continuous relaxation of atom types, with the diffusion run in the
+                zero-center-of-geometry subspace so global translation is removed from the modeled state space and the
+                Gaussian prior is defined on the centered coordinates. Read §2.1 (diffusion), §2.2 (equivariance),
+                §3.1-§3.2 (process and dynamics), and Appendix A (the zero-center-of-gravity construction). Problem 4
+                builds a miniature. Not to be confused with Karras EDM.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Conformer generation</span>
+              <div class="title"><a href="https://arxiv.org/abs/2203.02923" target="_blank" rel="noopener">Xu et al.,
+                  GeoDiff: A Geometric Diffusion Model for Molecular Conformation Generation</a></div>
+              <p class="desc">Diffusion for 3D conformers given the molecular graph. Read §3.1 (the fixed-graph
+                conformer problem) and §§4.1-4.4 (the diffusion formulation, equivariant reverse process, objective, and
+                sampling). Keep it for the contrast with EDM: it diffuses coordinates with the bonded graph fixed, a
+                different state space from unconditional atom-set generation.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Pocket-conditioned design</span>
+              <div class="title"><a href="https://arxiv.org/abs/2303.03543" target="_blank" rel="noopener">Guan et al.,
+                  3D Equivariant Diffusion for Target-Aware Molecule Generation (TargetDiff)</a></div>
+              <p class="desc">Structure-based ligand design: generate a 3D molecule inside a fixed protein pocket. Read
+                §§3.1-3.2 (problem and overview), §3.3 (molecular diffusion), §3.4 (the equivariant pocket-conditioned
+                process), and §3.5 (training objective). Note that it diffuses atom types and coordinates and
+                reconstructs bonds afterward rather than diffusing them. The first taste of conditioning and inverse
+                design, which Week 8 treats in full.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Crystalline materials</span>
+              <div class="title"><a href="https://arxiv.org/abs/2309.04475" target="_blank" rel="noopener">Jiao et al.,
+                  Crystal Structure Prediction by Joint Equivariant Diffusion (DiffCSP)</a></div>
+              <p class="desc">The primary direct-diffusion materials reading. Read §3 (preliminaries), §4.1
+                (crystal-distribution symmetries), §4.2 (joint equivariant diffusion of the lattice and fractional
+                coordinates), and §4.3 (the denoising architecture). It is conditioned on composition, and it is the
+                cleanest illustration of periodicity, fractional coordinates, and lattice variables, the subject of
+                Weeks 4 and 11.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Optional · further state spaces</span>
+              <div class="title"><a href="https://arxiv.org/abs/2110.06197" target="_blank" rel="noopener">CDVAE
+                  (2021)</a>, <a href="https://arxiv.org/abs/2206.01729" target="_blank" rel="noopener">Torsional
+                  Diffusion (2022)</a>, <a href="https://arxiv.org/abs/2312.03687" target="_blank"
+                  rel="noopener">MatterGen (2023)</a>, and a <a href="https://arxiv.org/abs/2502.09511" target="_blank"
+                  rel="noopener">molecule-diffusion survey (2025)</a></div>
+              <p class="desc">CDVAE is a historical/hybrid bridge, a VAE whose latents handle composition, atom count,
+                and lattice while a score-based decoder uses annealed Langevin for structure (not a single diffusion
+                over the whole crystal). Torsional Diffusion diffuses on the hypertorus of torsion angles, introducing
+                manifold-valued variables and parity/chirality (§§3.1-3.4). MatterGen (§2.1) is a modern capstone with
+                distinct corruption processes for atom types, periodic coordinates, and the lattice. The survey is a
+                literature map organized by representation, corruption process, conditioning, and task.</p>
+            </div>
+          </div>
+        </section>
+        <section id="problems">
+          <h2><span class="num">5</span>Problems</h2>
+          <p>Four problems, each on its own page with full statements. Two derivations that build the machinery, then
+            two coding labs that put it on real chemistry, a molecular free-energy surface and equivariant generation of
+            3D structures.</p>
+          <ol class="problem-list">
+            <li><a href="week2/problem-1.html"><span><span class="p-title">From Boltzmann distributions to denoising
+                    score matching</span></span><span class="p-kind">derivation</span></a></li>
+            <li><a href="week2/problem-2.html"><span><span class="p-title">The EDM design space: preconditioning,
+                    schedules, and weighting</span></span><span class="p-kind">derivation</span></a></li>
+            <li><a href="week2/problem-3.html"><span><span class="p-title">Coding lab: score-based sampling of a
+                    molecular free-energy surface</span></span><span class="p-kind">coding + statistical
+                  mechanics</span></a></li>
+            <li><a href="week2/problem-4.html"><span><span class="p-title">Coding lab: equivariant diffusion for 3D
+                    molecular structures</span></span><span class="p-kind">coding + geometry</span></a></li>
+          </ol>
+          <h3>Discussion prompts</h3>
+          <ul>
+            <li>The probability-flow ODE and the reverse-time SDE share every one-time marginal but not their path laws.
+              When would you pay for the stochastic sampler, and when is the deterministic one preferable under a fixed
+              compute or error budget? What does each buy a molecular generator specifically?</li>
+            <li>In what precise sense is a learned score a force field, and where does the analogy break, finite
+              temperature, normalization, off-equilibrium data?</li>
+            <li>A diffusion model can place the wrong relative weight on two metastable basins while every individual
+              sample looks valid. Why is this failure invisible to per-sample validity checks, and how would you detect
+              it?</li>
+            <li>EDM treats preconditioning, schedule, and weighting as largely separable choices (whose settings can
+              still interact). Which of these should change when you move from images to 3D molecular coordinates, and
+              why?</li>
+          </ul>
+        </section>
+        <section id="next">
+          <h2><span class="num">6</span>Connection to the next module</h2>
+          <p>This week leaves you with a slightly awkward object: a curved, stochastic path from noise to data, defined
+            by a noising family prescribed in advance rather than learned as a transport path. The reverse-time SDE
+            works, and the probability-flow ODE turns it into a deterministic flow, but that flow's trajectories still
+            bend, which is among the reasons accurate sampling can require many solver steps.</p>
+          <p>Week 3 asks the obvious next question. If the probability-flow ODE is just a flow in the Week 1 sense, why
+            inherit the path from a noising process at all? Flow matching picks the interpolation directly, the straight
+            conditional interpolant \(x_t=(1-t)x_0+t x_1\) being the simplest, and regresses the velocity onto it, the
+            same conditional-expectation move you already used in Week 1 Problem 5 and again in this week's denoising
+            objective. (A straight <em>conditional</em> path does not make every marginal trajectory straight, but it
+            does tend to reduce curvature.) Diffusion becomes one particular, curved choice of path inside a larger
+            family, and the freedom to choose straighter paths is what makes the next generation of models fast. The
+            score you learned this week and the velocity you learn next week are two coordinates on the same underlying
+            transport.</p>
+        </section>
+        <div class="nextprev">
+          <a href="week1.html">← Week 1: Probability transport and flow maps</a>
+          <a href="week3.html">Week 3: Flow matching and scalable generators →</a>
+        </div>
+      </article>
+      <aside class="side" aria-label="Page contents">
+        <div class="side-title">On this page</div>
+        <a href="week2/notes.html">Lecture notes →</a>
+        <a href="#orientation">Orientation</a>
+        <a href="#goals">Learning goals</a>
+        <a href="#readings">Methods readings</a>
+        <a href="#applications">Application readings</a>
+        <a href="#problems">Problems</a>
+        <a href="#next">Next connection</a>
+      </aside>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap">Built as a lightweight course site. Source pages are intentionally short and link out to papers,
+      notes, and code.</div>
+  </footer>
+</body>
+
+</html>

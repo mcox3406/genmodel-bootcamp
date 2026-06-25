@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 2 Problem 2 - Generative Modeling Bootcamp</title>
+  <meta name="description" content="Derive the EDM preconditioning, noise distribution, loss weighting, and second-order sampler, then ask what each knob should become for multi-scale molecular and materials data." />
+  <link rel="stylesheet" href="../../assets/style.css" />
+
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(', '\\)'], ['$', '$']],
+    displayMath: [['\\[', '\\]']]
+  },
+  svg: { fontCache: 'global' }
+};
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="wide">
+    <a class="brand" href="../../index.html">GenModel Bootcamp</a>
+    <nav class="navlinks" aria-label="Site">
+      <a href="../../index.html">Overview</a>
+      <a href="../../docs/syllabus.pdf">Syllabus</a>
+    </nav>
+    <nav class="weekstrip" aria-label="Weeks">
+      <span class="weekstrip-label">Week</span>
+      <a href="../week1.html">1</a><a href="../week2.html" class="active">2</a><a href="../week3.html">3</a><a href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
+    </nav>
+  </div>
+</nav>
+
+<header class="page">
+  <div class="wrap">
+    <div class="kicker">Week 2 · Problem 2 of 4</div>
+    <h1 class="title">The EDM design space: preconditioning, schedules, and weighting</h1>
+    <p class="subtitle">Derive the coefficients that keep the network's job unit-scale at every noise level, then ask what changes when the data are 3D molecular coordinates with several physical length scales.</p>
+    <nav class="actions" aria-label="Problem navigation"><a class="action" href="../week2.html">Week 2 overview</a><a class="action" href="../../docs/syllabus.pdf">Syllabus</a></nav>
+  </div>
+</header>
+<main>
+
+<div class="wide">
+  <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week2.html">Week 2</a> / Problem 2</div>
+  <div class="problem-shell">
+    <article>
+      <div class="problem-meta"><span>derivation</span><span>Week 2</span><span>selected assignment</span></div>
+      <div class="prereq">
+        <div class="prereq-col">
+          <strong>Concepts you need</strong>
+          <ul>
+            <li>The denoiser parameterization \(D_\theta\) and Tweedie's formula from Problem 1</li>
+            <li>Variance of sums of independent random variables</li>
+            <li>The VE perturbation kernel \(x = x_0 + \sigma\epsilon\)</li>
+            <li>Local truncation error and order of an ODE integrator (Week 1, Problem 4)</li>
+            <li>Characteristic length scales in molecular and crystal data</li>
+          </ul>
+        </div>
+        <div class="prereq-col">
+          <strong>If you get stuck</strong>
+          <ul>
+            <li><a href="https://arxiv.org/abs/2206.00364" target="_blank" rel="noopener">Karras et al. (EDM)</a>, Section 5 and Appendix B.6 for the preconditioning derivation and Table 1</li>
+            <li><a href="https://arxiv.org/abs/2206.00364" target="_blank" rel="noopener">EDM</a>, Algorithm 2 for the Heun sampler and the \(\rho\) schedule</li>
+            <li><a href="https://arxiv.org/abs/2203.17003" target="_blank" rel="noopener">Hoogeboom et al. (molecular EDM)</a> for how these choices land on 3D molecules</li>
+          </ul>
+        </div>
+      </div>
+      <div class="source-note"><strong>Source note.</strong> Original derivation problem following <a href="https://arxiv.org/abs/2206.00364" target="_blank" rel="noopener">Karras et al. (2022)</a>, Sections 3 and 5, with an application thread to molecular and materials length scales.</div>
+
+<p>Problem 1 left you with a denoiser \(D_\theta(x,\sigma)\) trained by regression. EDM's contribution is to notice that a raw network makes a badly conditioned regression target: at small \(\sigma\) the answer is almost the input, at large \(\sigma\) it must be hallucinated from noise, and the input magnitude itself swings by orders of magnitude. Preconditioning fixes all of this with a few scalar functions of \(\sigma\). This problem derives them from one principle, unit variance everywhere, and then asks the question the original paper did not have to: what are these knobs for data whose natural scale is set by chemistry.</p>
+<p>Write the preconditioned denoiser as</p>
+<div class="eqblock">\[
+D_\theta(x,\sigma) = c_{\mathrm{skip}}(\sigma)\,x + c_{\mathrm{out}}(\sigma)\,F_\theta\big(c_{\mathrm{in}}(\sigma)\,x,\;c_{\mathrm{noise}}(\sigma)\big),
+\]</div>
+<p>where \(F_\theta\) is the raw network. State the assumptions before deriving anything, since they are what let a single scalar \(\sigma_{\mathrm{data}}\) stand in for an entire molecular ensemble:</p>
+<div class="eqblock">\[
+\mathbb E[x_0]=0,\qquad \operatorname{Cov}(x_0)=\sigma_{\mathrm{data}}^2 I,\qquad
+\epsilon\sim\mathcal N(0,I),\qquad \epsilon\perp x_0,\qquad x = x_0 + \sigma\epsilon.
+\]</div>
+<p>Three of the four coefficients fall out of one requirement, unit variance everywhere. The fourth, \(c_{\mathrm{noise}}(\sigma)=\tfrac14\ln\sigma\), is <em>not</em> derived from the variance argument; it is an empirical conditioning convention for how the network is told the noise level, and you should flag it as such.</p>
+<figure class="fig"><img src="../../assets/figures/w2p2.png" alt="Left, the EDM preconditioning coefficients c_skip, c_out, c_in plotted against noise level. Right, the lognormal training-noise distribution with two molecular length scales, a stiff bond and a soft torsion, marked underneath it." loading="lazy" /><figcaption>The coefficients you derive in parts 1 to 3 (left). The training-noise distribution must cover every physical length scale the data contains, from stiff bonds to soft torsions (right, part 6).</figcaption></figure>
+<ol class="parts">
+<li><strong>Input scaling \(c_{\mathrm{in}}\).</strong> The network input is \(c_{\mathrm{in}}(\sigma)\,x\) with \(x=x_0+\sigma\epsilon\). Require it to have unit per-coordinate variance for all \(\sigma\). Using independence of \(x_0\) and \(\epsilon\), show \(c_{\mathrm{in}}(\sigma) = 1/\sqrt{\sigma^2+\sigma_{\mathrm{data}}^2}\).</li>
+<li><strong>Output and skip scaling \(c_{\mathrm{out}}, c_{\mathrm{skip}}\).</strong> The network's effective training target is \(F_\theta = \big(x_0 - c_{\mathrm{skip}}\,x\big)/c_{\mathrm{out}}\). Choose \(c_{\mathrm{skip}}\) to minimize the magnitude of \(c_{\mathrm{out}}\) (so the network corrects as little as possible), and choose \(c_{\mathrm{out}}\) so the target has unit variance. Derive
+\[
+c_{\mathrm{skip}}(\sigma)=\frac{\sigma_{\mathrm{data}}^2}{\sigma^2+\sigma_{\mathrm{data}}^2},\qquad
+c_{\mathrm{out}}(\sigma)=\frac{\sigma\,\sigma_{\mathrm{data}}}{\sqrt{\sigma^2+\sigma_{\mathrm{data}}^2}}.
+\]
+Check the two limits: at \(\sigma\ll\sigma_{\mathrm{data}}\) the denoiser is nearly the identity, and at \(\sigma\gg\sigma_{\mathrm{data}}\) it must predict the clean signal outright. Relate these limits to the figure.</li>
+<li><strong>Loss weighting.</strong> Training minimizes \(\mathbb E\big[\,\lambda(\sigma)\,c_{\mathrm{out}}(\sigma)^2\,\|F_\theta-\text{target}\|^2\big]\). Show that choosing \(\lambda(\sigma)=1/c_{\mathrm{out}}(\sigma)^2\) makes the effective per-\(\sigma\) loss \(\mathbb E\|F_\theta-\text{target}\|^2\) order one at every noise level, so no band of noise levels dominates the gradient. Write \(\lambda(\sigma)\) explicitly.</li>
+<li><strong>Noise-level distribution.</strong> EDM samples training noise as \(\ln\sigma\sim\mathcal N(P_{\mathrm{mean}},P_{\mathrm{std}}^2)\) with \((P_{\mathrm{mean}},P_{\mathrm{std}})=(-1.2,1.2)\). Explain why a log-normal over \(\sigma\) (rather than uniform in \(\sigma\) or in \(t\)) concentrates training where the denoising task is neither trivial nor hopeless, and sketch where its mass sits relative to \(\sigma_{\mathrm{data}}\). Treat these numbers as <em>image-derived baselines</em>, not universal constants: they were tuned to natural-image statistics, and part 6 is about what they should become for molecules.</li>
+<li><strong>Sampling schedule and second-order steps.</strong> The sampler discretizes \(\sigma\) as \(\sigma_i=\big(\sigma_{\max}^{1/\rho}+\tfrac{i}{N-1}(\sigma_{\min}^{1/\rho}-\sigma_{\max}^{1/\rho})\big)^\rho\) with \(\rho=7\), and takes Heun (second-order) steps on the probability-flow ODE. Explain what \(\rho>1\) does to the spacing of steps and why low-noise steps deserve to be denser. Compare Euler and Heun at equal <em>network function evaluations</em>, not equal step counts, since Heun uses about two evaluations per step; using the Week 1 order results, argue when the second-order step actually pays off. Be careful to present EDM's headline efficiency as the product of all these design choices together, schedule, preconditioning, weighting, and sampler, rather than crediting the second-order integrator alone. Again, \(\rho=7\) is an image baseline.</li>
+<li><strong>Now make it molecular: normal modes.</strong> A 3D molecular conformation is not unit-variance pixels. Make the length-scale argument precise in the harmonic approximation. Let \(U(q)=\tfrac12 q^\top H q\) after removing rigid zero modes, so the equilibrium ensemble is \(\Sigma=\operatorname{Cov}(q)=k_BT_{\mathrm{phys}}H^{+}\), and a normal mode of force constant \(\kappa_i\) has variance \(\lambda_i = k_BT_{\mathrm{phys}}/\kappa_i\). (a) Under VE noising \(q_\sigma=q_0+\sigma\epsilon\), show the per-mode signal-to-noise ratio is \(\mathrm{SNR}_i(\sigma)=\lambda_i/\sigma^2\), so each mode carries its signal until a crossover \(\sigma_i^{\mathrm{cross}}=\sqrt{k_BT_{\mathrm{phys}}/\kappa_i}\). A stiff bond (large \(\kappa\)) and a soft torsion (small \(\kappa\)) therefore have crossovers separated by orders of magnitude, and a single scalar \(\sigma_{\mathrm{data}}\) with an isotropic schedule is not so much unable to cover both as <em>poorly conditioned</em> for them: it must span a very broad range, and a scalar preconditioner cannot equalize all modes at once. Mark both crossovers on the schedule figure. (b) Propose one concrete fix consistent with the EDM framework, per-feature or per-length-scale standardization, a coordinate normalization, or diffusing internal coordinates, and state what it changes in \(c_{\mathrm{in}}\) and the noise distribution. (c) The molecular EDM (Hoogeboom et al.) diffuses atom types and coordinates jointly; explain why their differing natural scales make the relative noising of the two a real design decision. The same normal-mode calculation, read as phonons, is the materials version of this argument.</li>
+<li><strong>Anisotropic shrinkage.</strong> For the harmonic ensemble of part 6, derive the exact optimal denoiser \(D^\star(x,\sigma)=\Sigma(\Sigma+\sigma^2 I)^{-1}x\) (this is the Problem 1 warm-up result). Show that in the eigenbasis of \(\Sigma\) it acts mode by mode as the scalar EDM shrinkage \(\lambda_i/(\lambda_i+\sigma^2)\), i.e. EDM preconditioning is per-mode Wiener filtering. This single identity ties statistical mechanics, optimal estimation, and diffusion preconditioning together, and explains why stiff and soft modes are denoised at different rates by one network.</li>
+</ol>
+<div class="why"><strong>Why this matters.</strong> The gap between a diffusion model that works on images and one that works on molecules is mostly in this problem. Preconditioning and schedules are where the physics of length scales enters a model that otherwise knows nothing about chemistry, and getting them wrong shows up as bonds that rattle or torsions that never explore.</div>
+
+      <div class="pager"><a href="problem-1.html">← Problem 1: From Boltzmann distributions to denoising score matching</a><a href="problem-3.html">Problem 3: Score-based sampling of a molecular free-energy surface →</a></div>
+    </article>
+    <aside class="problem-nav" aria-label="Week 2 problem navigation">
+      <a href="notes.html">Lecture notes</a>
+      <strong>Week 2 problems</strong>
+      <a href="problem-1.html">Problem 1: From Boltzmann distributions to denoising score matching</a><a class="current" href="problem-2.html">Problem 2: The EDM design space: preconditioning, schedules, and weighting</a><a href="problem-3.html">Problem 3: Coding lab: score-based sampling of a molecular free-energy surface</a><a href="problem-4.html">Problem 4: Coding lab: equivariant diffusion for 3D molecular structures</a>
+    </aside>
+  </div>
+</div>
+
+</main>
+<footer>
+  <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes remain the primary source material.</div>
+</footer>
+</body>
+</html>

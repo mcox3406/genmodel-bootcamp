@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 2 Problem 1 - Generative Modeling Bootcamp</title>
+  <meta name="description"
+    content="Build the diffusion machinery from the Boltzmann distribution: forward SDE, reverse-time SDE, probability-flow ODE, and denoising score matching, with the score as a force field." />
+  <link rel="stylesheet" href="../../assets/style.css" />
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)'], ['$', '$']],
+        displayMath: [['\\[', '\\]']]
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head>
+
+<body>
+
+  <nav class="topbar">
+    <div class="wide">
+      <a class="brand" href="../../index.html">GenModel Bootcamp</a>
+      <nav class="navlinks" aria-label="Site">
+        <a href="../../index.html">Overview</a>
+        <a href="../../docs/syllabus.pdf">Syllabus</a>
+      </nav>
+      <nav class="weekstrip" aria-label="Weeks">
+        <span class="weekstrip-label">Week</span>
+        <a href="../week1.html">1</a><a href="../week2.html" class="active">2</a><a href="../week3.html">3</a><a
+          href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a
+          href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a
+          href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
+      </nav>
+    </div>
+  </nav>
+
+  <header class="page">
+    <div class="wrap">
+      <div class="kicker">Week 2 · Problem 1 of 4</div>
+      <h1 class="title">From Boltzmann distributions to denoising score matching</h1>
+      <p class="subtitle">Build the whole diffusion machinery once, with a molecular energy landscape as the running
+        example and the score as a force field.</p>
+      <nav class="actions" aria-label="Problem navigation"><a class="action" href="../week2.html">Week 2 overview</a><a
+          class="action" href="../../docs/syllabus.pdf">Syllabus</a></nav>
+    </div>
+  </header>
+  <main>
+
+    <div class="wide">
+      <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week2.html">Week 2</a> / Problem 1
+      </div>
+      <div class="problem-shell">
+        <article>
+          <div class="problem-meta"><span>derivation</span><span>Week 2</span><span>selected assignment</span></div>
+          <div class="prereq">
+            <div class="prereq-col">
+              <strong>Concepts you need</strong>
+              <ul>
+                <li>Itô SDEs and the Fokker-Planck (forward Kolmogorov) equation</li>
+                <li>The Ornstein-Uhlenbeck process and its Gaussian transition kernel</li>
+                <li>Gaussian score \(\nabla_x\log\mathcal N(x;\mu,\Sigma)\)</li>
+                <li>The continuity equation from Week 1, Section 4</li>
+                <li>Conditional expectation as the minimizer of squared error</li>
+              </ul>
+            </div>
+            <div class="prereq-col">
+              <strong>If you get stuck</strong>
+              <ul>
+                <li><a href="https://yang-song.net/blog/2021/score/" target="_blank" rel="noopener">Yang Song's blog</a>
+                  for the SDE and probability-flow ODE picture end to end</li>
+                <li><a href="https://arxiv.org/abs/2011.13456" target="_blank" rel="noopener">Song et al. (Score
+                    SDE)</a>, Sections 3 and 4 and Appendix D for the reverse SDE and the probability-flow ODE</li>
+                <li><a href="https://arxiv.org/abs/2006.11239" target="_blank" rel="noopener">DDPM</a> for the
+                  closed-form forward marginal and \(\epsilon\)-prediction</li>
+                <li>Week 1 <a href="problem-1.html">Problem 1</a> for the Gaussian-smoothing score you reuse here</li>
+              </ul>
+            </div>
+          </div>
+          <div class="source-note"><strong>Source note.</strong> Original problem assembling standard results from <a
+              href="https://arxiv.org/abs/2011.13456" target="_blank" rel="noopener">Song et al. (2021)</a>, <a
+              href="https://arxiv.org/abs/2006.11239" target="_blank" rel="noopener">Ho et al. (2020)</a>, and <a
+              href="https://doi.org/10.1162/neco_a_00142" target="_blank" rel="noopener">Vincent (2011)</a>, framed
+            through the Boltzmann/score correspondence.</div>
+
+          <p>This problem builds the entire reverse-diffusion toolkit in one pass. We try to stay anchored to a physical
+            picture to help with intuition. Take the data distribution to be a Boltzmann distribution over molecular
+            configurations \(x\in\mathbb R^d\) at physical inverse temperature
+            \(\beta_{\mathrm{phys}}=1/k_BT_{\mathrm{phys}}\),</p>
+          <div class="eqblock">\[
+            p_{\mathrm{data}}(x) = \frac{1}{Z}\,e^{-\beta_{\mathrm{phys}}\,U(x)},
+            \]</div>
+          <p>with \(U\) a potential energy. You will run an <em>artificial</em> noising process that turns this
+            distribution into a reference Gaussian, derive the two ways to reverse it, and show that the object both
+            reversals require, the score, is learnable by regression and, at zero noise, is the physical force. Keep two
+            notions of "temperature" apart throughout: \(\beta_{\mathrm{phys}}\) and \(U\) are physics, while the
+            diffusion time \(t\) and noise scale \(\sigma\) are a corruption schedule you choose, not a thermodynamic
+            temperature.</p>
+          <div class="note">
+            <p><strong>Units and conventions.</strong> Treat coordinates as nondimensionalized (or replace \(I\) with a
+              reference covariance carrying units). Then \(x,\sigma,\sigma_{\mathrm{data}},c_{\mathrm{out}}\) carry
+              length, \(c_{\mathrm{in}}\) inverse length, \(c_{\mathrm{skip}}\) is dimensionless, the score
+              \(\nabla_x\log p\) carries inverse length, and \(k_BT_{\mathrm{phys}}\,\nabla_x\log p\) carries force.
+              Reserve \(t,\sigma\) for the diffusion process and \(\beta_{\mathrm{phys}},T_{\mathrm{phys}}\) for
+              thermodynamics; the two are unrelated.</p>
+          </div>
+          <div class="note note-blue">
+            <p><strong>Warm-up (optional, recommended).</strong> Do everything in closed form first for a harmonic
+              landscape \(U(x)=\tfrac12 x^\top K x\), so \(p_{\mathrm{data}}=\mathcal N(0,\Sigma)\) with
+              \(\Sigma=k_BT_{\mathrm{phys}}\,K^{+}\) (the pseudoinverse absorbs rigid zero modes). Under
+              variance-exploding noising \(x_\sigma=x_0+\sigma\epsilon\), show \(p_\sigma=\mathcal N(0,\Sigma+\sigma^2
+              I)\), hence the exact score \(s_\sigma(x)=-(\Sigma+\sigma^2 I)^{-1}x\) and exact denoiser
+              \(D^\star(x,\sigma)=\Sigma(\Sigma+\sigma^2 I)^{-1}x\). Every numbered part below is the nonlinear
+              generalization of this one example, and Problem 2 reuses its eigenmode structure directly.</p>
+          </div>
+          <figure class="fig"><img src="../../assets/figures/w2p1.png"
+              alt="Left, a double-well Boltzmann density relaxing toward a Gaussian as the forward process runs. Right, the score field of a double-well density drawn as a force field pointing into the two basins."
+              loading="lazy" />
+            <figcaption>The running example. A double-well Boltzmann density is Gaussianized by the forward process
+              (left, part 1). For these full Cartesian coordinates its score is exactly the force field
+              \(-\beta_{\mathrm{phys}}\nabla U\), pointing into both basins (right, part 6).</figcaption>
+          </figure>
+          <ol class="parts">
+            <li><strong>Forward process and perturbation kernel.</strong> Consider the variance-preserving
+              (Ornstein-Uhlenbeck) forward SDE \(\mathrm dx = -\tfrac12\beta(t)\,x\,\mathrm dt +
+              \sqrt{\beta(t)}\,\mathrm dw\), where \(\beta(t)\) is a schedule rate, not a temperature. Show that the
+              transition kernel is Gaussian, \(p_{0t}(x_t\mid x_0)=\mathcal
+              N\big(x_t;\sqrt{\bar\alpha_t}\,x_0,\,(1-\bar\alpha_t)I\big)\), and give \(\bar\alpha_t\) in terms of
+              \(\int_0^t\beta(s)\,\mathrm ds\). Confirm that as \(t\to\infty\) the marginal forgets \(x_0\) and tends to
+              \(\mathcal N(0,I)\) regardless of how rugged \(U\) was. Interpret this as an artificial
+              <em>Gaussianization</em> that progressively erases molecular structure toward a chosen reference Gaussian.
+              It is not physical heating under \(U\), and the endpoint is not an ideal gas: ideal-gas positions are
+              uniform in a finite box and are not even normalizable over unbounded space.</li>
+            <li><strong>The marginal score is a smoothed force.</strong> Writing \(p_t(x)=\int p_{0t}(x\mid
+              x_0)\,p_{\mathrm{data}}(x_0)\,\mathrm dx_0\), show that the perturbation kernel makes \(p_t\) a
+              Gaussian-smoothed (and rescaled) version of the data, and reuse the Week 1 smoothing identity to write
+              \(\nabla_x\log p_t(x)\) as a softmax-weighted average of displacements toward rescaled data points. This
+              is the continuum of the empirical-measure smoothing from Week 1 Problem 1.</li>
+            <li><strong>Reverse-time SDE.</strong> State Anderson's result: the reverse of \(\mathrm dx =
+              f(x,t)\,\mathrm dt + g(t)\,\mathrm dw\) is \(\mathrm dx = [f(x,t)-g(t)^2\nabla_x\log p_t(x)]\,\mathrm dt +
+              g(t)\,\mathrm d\bar w\) with \(\mathrm dt<0\). To avoid the most common sign error, change to positive
+                reverse time \(\tau=T-t\) and let \(\widetilde p_\tau(x)=p_{T-\tau}(x)\); then verify the construction
+                by showing that \(\widetilde p_\tau\) satisfies the Fokker-Planck equation of the reverse process, so
+                the forward and reverse SDEs share every marginal \(p_t\). (The drift correction \(-g^2\nabla\log p_t\)
+                is exactly what reverses the sign of the probability current.)</li>
+            <li><strong>Probability-flow ODE.</strong> Show that the deterministic ODE \(\dfrac{\mathrm dx}{\mathrm
+              dt}=f(x,t)-\tfrac12 g(t)^2\nabla_x\log p_t(x)\) has the same marginals \(p_t\) as the forward SDE, by
+              writing the Fokker-Planck equation as a continuity equation \(\partial_t p_t + \nabla\!\cdot(p_t v_t)=0\)
+              and reading off the velocity \(v_t\). Connect this back to Week 1: the probability-flow ODE is an ordinary
+              flow whose velocity is built from the score, so the instantaneous change-of-variables formula gives exact
+              likelihoods. Stress what it is <em>not</em>: this trajectory is an artificial probability-transport path,
+              not a molecular-dynamics trajectory, a reaction pathway, or a minimum-energy path. The reverse SDE and
+              this ODE share every one-time marginal but have entirely different path laws.</li>
+            <li><strong>Denoising score matching.</strong> The explicit objective \(\mathbb
+              E_{p_t}\|s_\theta(x,t)-\nabla\log p_t(x)\|^2\) needs the unknown \(\nabla\log p_t\). Show it is
+              equivalent, up to a constant independent of \(\theta\), to the denoising objective
+              \[
+              \mathcal L(\theta)=\mathbb E_{t}\,\mathbb E_{x_0}\,\mathbb E_{x_t\sim p_{0t}(\cdot\mid
+              x_0)}\Big\|s_\theta(x_t,t)-\nabla_{x_t}\log p_{0t}(x_t\mid x_0)\Big\|^2,
+              \]
+              and evaluate the per-sample target for the Gaussian kernel of part 1 to get \(\nabla_{x_t}\log
+              p_{0t}(x_t\mid x_0) = -\,\dfrac{x_t-\sqrt{\bar\alpha_t}\,x_0}{1-\bar\alpha_t} =
+              -\dfrac{\epsilon}{\sqrt{1-\bar\alpha_t}}\). Give the clean proof of equivalence rather than a long
+              expansion: set \(Y=\nabla_{x_t}\log p_{0t}(x_t\mid x_0)\), note that the minimizer of a squared error is
+              the conditional mean, so \(\mathbb E[Y\mid x_t]=\nabla_{x_t}\log p_t(x_t)\), and the bias-variance
+              decomposition makes the two objectives differ by a \(\theta\)-independent constant. Conclude
+              \(s_\theta^\star(x,t)=\nabla_x\log p_t(x)\).</li>
+            <li><strong>The score is a force, with one qualification.</strong> For full Cartesian coordinates at
+              \(t=0\), show \(\nabla_x\log p_{\mathrm{data}}(x) = -\beta_{\mathrm{phys}}\nabla_x
+              U(x)=\beta_{\mathrm{phys}}F(x)\), exactly the physical force over \(k_BT_{\mathrm{phys}}\), with the
+              partition function \(Z\) gone. Explain in a sentence why this is precisely why score-based methods
+              sidestep the intractable normalizer. Then state the caveat: for a reduced or collective coordinate \(q\),
+              \(p(q)\propto e^{-\beta_{\mathrm{phys}}A(q)}\) where \(A\) is a free energy / potential of mean force, so
+              \(k_BT_{\mathrm{phys}}\nabla_q\log p(q)\) is a <em>mean</em> force carrying entropic and
+              coordinate-Jacobian contributions, not the microscopic atomic force. For \(t>0\), define the effective
+              landscape \(A_t^{\mathrm{eff}}(x)=-k_BT_{\mathrm{phys}}\log p_t(x)+C_t\), so that
+              \(k_BT_{\mathrm{phys}}\nabla\log p_t = -\nabla A_t^{\mathrm{eff}}\): an exact effective force in the
+              artificial noised coordinate space, not a force of the original Hamiltonian. Finally, do not assume noise
+              simply "flattens barriers"; measure the effective barrier between the two wells of the figure as a
+              function of \(\sigma\) and report whether smoothing lowers, shifts, or merges them.</li>
+            <li><strong>Three parameterizations, and the VP/VE bridge.</strong> Show that predicting the noise
+              \(\epsilon\), predicting the clean sample \(x_0\) (the denoiser \(D_\theta\)), and predicting the score
+              \(s_\theta\) are linear reparameterizations of one another, related by Tweedie's formula \(\mathbb
+              E[x_0\mid x_t]=\tfrac{1}{\sqrt{\bar\alpha_t}}\big(x_t+(1-\bar\alpha_t)\nabla\log p_t(x_t)\big)\). Be
+              precise about what is learned: \(\epsilon\)-prediction targets \(\mathbb E[\epsilon\mid x_t]\) and
+              \(x_0\)-prediction targets \(\mathbb E[x_0\mid x_t]\); neither recovers the particular injected noise or
+              clean sample, only its conditional mean. Then bridge the VP convention used here to the variance-exploding
+              convention \(y=x_0+\sigma\epsilon\) of Problem 2 by the rescaling
+              \(y_t=x_t/\sqrt{\bar\alpha_t}=x_0+\sigma_t\epsilon\) with \(\sigma_t^2=(1-\bar\alpha_t)/\bar\alpha_t\), so
+              Problem 2 is not a new model but the same one in different coordinates. State which target EDM trains and
+              why a denoiser is better conditioned across noise levels.</li>
+          </ol>
+          <div class="why"><strong>Why this matters.</strong> Every later diffusion paper, and the molecular generators
+            in Weeks 10 and 11, is some choice of forward process, parameterization, and sampler layered on top of
+            exactly these identities. Deriving them once, with the score pinned to a physical force, is what lets you
+            read those papers as design decisions rather than magic.</div>
+
+          <div class="pager"><a href="../week2.html">← Week 2 overview</a><a href="problem-2.html">Problem 2: The EDM
+              design space →</a></div>
+        </article>
+        <aside class="problem-nav" aria-label="Week 2 problem navigation">
+          <a href="notes.html">Lecture notes</a>
+          <strong>Week 2 problems</strong>
+          <a class="current" href="problem-1.html">Problem 1: From Boltzmann distributions to denoising score
+            matching</a><a href="problem-2.html">Problem 2: The EDM design space: preconditioning, schedules, and
+            weighting</a><a href="problem-3.html">Problem 3: Coding lab: score-based sampling of a molecular free-energy
+            surface</a><a href="problem-4.html">Problem 4: Coding lab: equivariant diffusion for 3D molecular
+            structures</a>
+        </aside>
+      </div>
+    </div>
+
+  </main>
+  <footer>
+    <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes
+      remain the primary source material.</div>
+  </footer>
+</body>
+
+</html>
