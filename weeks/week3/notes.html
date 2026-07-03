@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 3 notes on flow matching and rectified flows</title>
+  <meta name="description"
+    content="Lecture notes for Week 3: probability paths, the marginal vector field, conditional flow matching and its unbiasedness, straightness and path curvature, rectified flow and reflow, couplings and optimal transport, scalable transformer generators, and Riemannian flow matching for proteins and crystals." />
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="../../assets/style.css" />
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(', '\\)'], ['$', '$']], displayMath: [['\\[', '\\]']] },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+
+<body>
+  <nav class="topbar">
+    <div class="wide">
+      <a class="brand" href="../../index.html">GenModel Bootcamp</a>
+      <nav class="navlinks" aria-label="Site">
+        <a href="../../index.html">Overview</a>
+        <a href="../../docs/syllabus.pdf">Syllabus</a>
+      </nav>
+      <nav class="weekstrip" aria-label="Weeks">
+        <span class="weekstrip-label">Week</span>
+        <a href="../week1.html">1</a><a href="../week2.html">2</a><a href="../week3.html" class="active">3</a><a
+          href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a
+          href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a
+          href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
+      </nav>
+    </div>
+  </nav>
+
+  <header class="page">
+    <div class="wrap">
+      <div class="kicker">Week 3 · lecture notes</div>
+      <h1 class="title">Flow matching and rectified flows</h1>
+      <p class="subtitle">A compact tour of the Week 3 readings, from probability paths and the conditional-flow-matching
+        identity to straightness, rectified flow, couplings, the transformer generators that scale, and Riemannian flow
+        matching for proteins and crystals.</p>
+      <nav class="actions" aria-label="Notes navigation">
+        <a class="action" href="../week3.html">Week 3 overview</a>
+        <a class="action primary" href="problem-1.html">Problems</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <div class="wide page-layout">
+      <article>
+        <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week3.html">Week 3</a> / Notes</div>
+
+        <div class="note">
+          <p>These notes condense the Week 3 readings into the ideas you need, organized by concept rather than by
+            paper. Every section names its source and the problem that uses it. Notation continues from Weeks 1-2, with
+            the velocity field \(u_t\) returning as the learned object, now regressed onto a path you choose rather than
+            integrated from a fixed noising process. The through-line: pick a probability path, regress a velocity onto
+            it by conditional expectation, and straighten the path to sample fast.</p>
+        </div>
+
+        <section id="chosen-path">
+          <h2><span class="num">1</span>From an inherited path to a chosen one</h2>
+          <p>Week 2 ended on the probability-flow ODE: diffusion is, underneath, a deterministic Week 1 flow whose
+            velocity is built from the score. But its path is inherited from a Gaussian noising process and it curves,
+            which is why sampling needs many steps. Flow matching makes the path a <strong>choice</strong>. Fix a base
+            density \(p_0\) you can sample (a standard Gaussian) and the data \(p_1=q\), and pick any
+            <strong>probability path</strong> \(p_t\) between them; the model learns the velocity \(u_t\) that transports
+            \(p_0\) along it. Diffusion becomes one curved member of a large family, and the simplest member, the
+            straight-line interpolant, is both easier to learn and cheaper to sample.</p>
+          <div class="source-note"><strong>From the readings.</strong> MIT notes §3; Lipman et al. §§3-4.1 and §6.2;
+            Liu et al. §2 for straightness and reflow. The path-as-design-choice framing is the organizing idea of the
+            Flow Matching Guide.</div>
+        </section>
+
+        <section id="paths">
+          <h2><span class="num">2</span>Probability paths and the marginal vector field</h2>
+          <p>Build the path from pieces you can write down. A <strong>conditional path</strong> \(p_t(x\mid x_1)\)
+            interpolates the base density and a single data point \(x_1\); for the \(\sigma_{\min}=0\) straight
+            interpolant \(x_t=(1-t)x_0+t x_1\) with \(x_0\sim\mathcal N(0,I)\), and for \(t&lt;1\), it is the Gaussian
+            \(\mathcal N(t x_1,(1-t)^2 I)\) with conditional velocity \(u_t(x\mid x_1)=(x_1-x)/(1-t)\). (The velocity is
+            singular at \(t=1\); in practice one uses a small \(\sigma_{\min}&gt;0\) to keep it finite at the data end.)
+            Averaging over data gives the
+            <strong>marginal path</strong> \(p_t(x)=\int p_t(x\mid x_1)\,q(x_1)\,\mathrm dx_1\), and the key structural
+            fact, the <strong>marginalization trick</strong>, is that it is generated by the posterior-weighted average
+            of the conditional velocities,</p>
+          <div class="eqblock">\[ u_t(x)=\mathbb E\big[u_t(x\mid x_1)\mid x_t=x\big]=\int u_t(x\mid
+            x_1)\,\frac{p_t(x\mid x_1)\,q(x_1)}{p_t(x)}\,\mathrm dx_1. \]</div>
+          <p>This marginal field satisfies the continuity equation for \(p_t\), so integrating \(\dot x=u_t(x)\)
+            transports \(p_0\) onto \(q\). It is the exact object a flow-matching network approximates; the trouble is
+            only that the posterior weight involves the unknown normalizer \(p_t(x)\), the same obstruction as the
+            score in Week 2.</p>
+          <figure class="fig"><img src="../../assets/figures/w3n-path.png"
+              alt="Four panels showing the marginal probability path of the straight interpolant from a wide Gaussian at t=0 through intermediate blends to three sharp molecule-like modes at t=1." loading="lazy" />
+            <figcaption>The marginal path \(p_t\) of the straight interpolant, from the Gaussian base at \(t=0\) to a
+              three-mode target at \(t=1\). Flow matching learns the velocity that carries mass along this family; the
+              path is chosen, not inherited from a noising process.</figcaption>
+          </figure>
+          <div class="source-note"><strong>From the readings.</strong> Lipman et al. §3.1 (Theorem 1), and §4
+            (Theorem 3) / §4.1 for the Gaussian-path formula; Flow Matching Guide §§4.2-4.4. Derived in <a
+              href="problem-1.html">Problem 1</a>.</div>
+        </section>
+
+        <section id="cfm">
+          <h2><span class="num">3</span>Conditional flow matching and its unbiasedness</h2>
+          <p>The intractable objective is to match the marginal field, \(\mathbb E_{t,x\sim p_t}\|v_\theta-u_t\|^2\).
+            <strong>Conditional flow matching</strong> replaces it with a tractable per-sample regression: draw a data
+            point, a time, and a point on its conditional path, and regress onto the conditional velocity,</p>
+          <div class="eqblock">\[ \mathcal L_{\mathrm{CFM}}(\theta)=\mathbb E_{t,\;x_1\sim q,\;x\sim p_t(\cdot\mid
+            x_1)}\big\|v_\theta(x,t)-u_t(x\mid x_1)\big\|^2. \]</div>
+          <p>The central theorem is that this differs from the intractable objective only by a \(\theta\)-independent
+            constant, so the two share the <em>same gradient</em> and the same minimizer, the marginal field,</p>
+          <div class="eqblock">\[ \nabla_\theta\mathcal L_{\mathrm{CFM}}=\nabla_\theta\mathcal L_{\mathrm{FM}},\qquad
+            v_\theta^\star(x,t)=u_t(x)=\mathbb E[u_t(x\mid x_1)\mid x_t=x]. \]</div>
+          <p>The proof is the Week 2 argument verbatim: the minimizer of a squared-error regression is the conditional
+            mean, and the conditional mean of the per-sample velocity is exactly the marginal velocity. No single
+            per-sample target is the answer, but their conditional average is. Flow matching and denoising score
+            matching are the same conditional-expectation move applied to a velocity and a score respectively, and for
+            an affine Gaussian path the two learned objects are linear reparameterizations of each other, so diffusion
+            is recovered as one particular path.</p>
+          <figure class="fig"><img src="../../assets/figures/w3p1.png"
+              alt="Left, per-sample conditional velocities pointing to different modes averaging to the marginal velocity at a point. Right, the exact marginal velocity field for a three-mode target." loading="lazy" />
+            <figcaption>Each data sample defines a conditional velocity (blue); their conditional average is the marginal
+              velocity (red, left), assembled into the exact field the network learns (right). Same picture as the
+              denoising-score-matching figure of Week 2, with a velocity in place of a score.</figcaption>
+          </figure>
+          <div class="source-note"><strong>From the readings.</strong> Lipman et al. §3.2 (Theorem 2); Tong et al. §3.1
+            (general couplings); Lipman §4.1 for the diffusion/score connection. Derived in <a
+              href="problem-1.html">Problem 1</a>, trained in <a href="problem-3.html">Problem 3</a>.</div>
+        </section>
+
+        <section id="straight">
+          <h2><span class="num">4</span>Straightness, curvature, and the cost of sampling</h2>
+          <p>A trained flow is only as cheap to sample as its trajectories are straight. Straightness is a property of
+            the learned ODE trajectory \(Z_t\), not of the training interpolant: define the <strong>straightness
+              functional</strong> \(S(Z)=\int_0^1\mathbb E\|(Z_1-Z_0)-\dot Z_t\|^2\mathrm dt\), which is zero exactly
+            when the trajectories are straight constant-speed chords \(Z_t=(1-t)Z_0+t Z_1\), in which case a single
+            Euler step is exact. The subtlety of the week is the gap between the two. The linear interpolation
+            \(x_t=(1-t)x_0+t x_1\) is straight by construction, but under an independent coupling those lines cross, and
+            a deterministic ODE with unique solutions cannot cross, so the learned <em>marginal</em> flow must curve to
+            route around the crossings. Rectified flow causalizes the crossing interpolation into a non-crossing ODE;
+            the residual curvature is what sets the number of function evaluations a sampler needs.</p>
+          <p>Two measurable quantities track this, and it is worth not confusing them. The <strong>trajectory
+              straightness</strong> \(S(Z)\) above is evaluated along the learned ODE path and is what Problem 2 uses in
+            theory. The <strong>straightness error</strong> \(\widehat S=\mathbb E_{(x_0,x_1),t}\|v_\theta(x_t,t)-(x_1-x_0)\|^2\),
+            the CFM training residual on coupled interpolant points, is the cheap surrogate Problem 3 measures. Both are
+            zero for a perfectly straight, non-crossing flow and both fall under OT coupling and reflow, but one is a
+            property of the sampled trajectory and the other of the fitted regression.</p>
+          <figure class="fig"><img src="../../assets/figures/w3n-straight.png"
+              alt="Left, a curved marginal trajectory and the straight chord between its endpoints, the gap being the curvature. Right, a log-log plot of distribution error falling as the number of Euler steps increases." loading="lazy" />
+            <figcaption>Curvature is the gap between a marginal trajectory and its straight chord (left). The sampling
+              error falls as steps increase (right); the straighter the flow, the fewer steps reach a given error, which
+              is the entire motivation for rectifying the paths.</figcaption>
+          </figure>
+          <div class="source-note"><strong>From the readings.</strong> Liu et al. §§2.1-2.2 and §3.3; Lipman et al.
+            §6.2 for sampling-efficiency evidence. Derived in <a href="problem-2.html">Problem 2</a>, measured in <a
+              href="problem-3.html">Problem 3</a>.</div>
+        </section>
+
+        <section id="reflow">
+          <h2><span class="num">5</span>Rectified flow and reflow</h2>
+          <p>Rectified flow fixes the curvature after the fact. Train a flow from the independent coupling, then use its
+            flow map \(G\) to re-pair each noise sample with the generated endpoint reached by integrating the current
+            flow, and retrain on the straight lines of the new coupling \(\pi^{(1)}=\mathrm{law}(x_0,G(x_0))\). In the
+            exact rectification setting this <strong>reflow</strong> operation has two guarantees: it <em>preserves the
+              endpoint marginals</em> (it does not change what is generated), and it <em>does not increase any convex
+              transport cost</em>, including the squared distance \(\mathbb E\|x_1-x_0\|^2\); under rectifiability
+            assumptions, iterating it straightens the induced flows. Finite neural implementations only approximate
+            this, since integration and model error can accumulate across rounds, so in practice one or two rounds
+            straighten enough for few-step sampling and genuine one-step generation is the distillation topic of
+            Week 6.</p>
+          <figure class="fig"><img src="../../assets/figures/w3p2.png"
+              alt="Left, curved round-0 marginal trajectories converging on three modes. Right, the straightened reflow target pairing the same endpoints with straight lines." loading="lazy" />
+            <figcaption>Round 0 marginal paths curve (left); reflow re-pairs each noise sample with its integrated
+              endpoint and regresses on the straight line between them (right). The marginals are unchanged, the paths
+              far straighter.</figcaption>
+          </figure>
+          <div class="source-note"><strong>From the readings.</strong> Liu et al. §§2.1-2.2 for the overview; §§3.1-3.3
+            (Theorems 3.3, 3.5, 3.7) for the marginal-preservation, convex-cost, and straightening guarantees. Derived
+            in <a href="problem-2.html">Problem 2</a>, implemented in <a href="problem-3.html">Problem 3</a>.</div>
+        </section>
+
+        <section id="couplings">
+          <h2><span class="num">6</span>Couplings and optimal transport</h2>
+          <p>The marginalization trick and CFM unbiasedness hold for <em>any</em> valid coupling \(\pi(x_0,x_1)\) with
+            the right marginals, not just the independent one. The coupling does not change what is generated, but it
+            changes the curvature. The extreme case is the 2-Wasserstein optimal-transport coupling, whose displacement
+            interpolation is straight and non-crossing; with appropriate regularity, the \(\sigma^2\to0\) OT-CFM path
+            solves the dynamic optimal-transport problem. <strong>OT-CFM</strong> approximates this by solving optimal
+            transport within each minibatch and using the matched pairs. The result is straighter flows and better
+            few-step samples at the modest overhead of a per-batch OT solve, but minibatch OT only approximates the
+            population plan, with an error that disappears only in the full-support / full-batch limit, the tradeoff
+            Week 5 formalizes with entropic OT and Sinkhorn.</p>
+          <figure class="fig"><img src="../../assets/figures/w3p3.png"
+              alt="Left, independent coupling with long crossing lines and large mean squared displacement. Right, OT coupling with short nearly non-crossing lines and small mean squared displacement." loading="lazy" />
+            <figcaption>Independent pairing (left) versus minibatch OT pairing (right) on the same marginals. The OT
+              coupling matches nearby points, cutting the transport cost and the crossings; the generated distribution
+              is identical, only the paths differ.</figcaption>
+          </figure>
+          <div class="source-note"><strong>From the readings.</strong> Tong et al. §3.2 and Table 1, with §3.2.3 for
+            OT-CFM and the minibatch approximation; Multisample Flow Matching. Measured in <a
+              href="problem-3.html">Problem 3</a>, completed in Week 5.</div>
+        </section>
+
+        <section id="scaling">
+          <h2><span class="num">7</span>Why it scales: transformer generators</h2>
+          <p>Flow matching is not just cleaner theory; it is what large generators are trained with. The objective is
+            <strong>simulation-free</strong> (a regression with no ODE solve, divergence, or likelihood in the loop),
+            its velocity target in common interpolant and rectified-flow setups avoids the endpoint score singularities
+            that appear in common score parameterizations (SiT notes a \(\sigma_t^{-1}\) blow-up near the noise end), and
+            straighter paths cut sampling cost. Holding the <strong>DiT</strong> patch-and-adaLN backbone fixed,
+            <strong>SiT</strong> reports uniformly better ImageNet 256/512 results than DiT across model sizes, and
+            <strong>Stable Diffusion 3</strong> scales a rectified-flow transformer (with logit-normal timestep sampling
+            and a multimodal MM-DiT) for text-to-image, with validation loss tracking quality across model sizes.
+            <strong>Movie Gen</strong> carries a flow-matching recipe to a 30B-parameter video transformer. These
+            benchmark-specific results support the objective, not only the architecture, being a major scaling
+            ingredient.</p>
+          <div class="source-note"><strong>From the readings.</strong> Peebles &amp; Xie (DiT); Ma et al. (SiT); Esser
+            et al. (SD3); Polyak et al. (Movie Gen). Context for the whole second half of the course.</div>
+        </section>
+
+        <section id="riemannian">
+          <h2><span class="num">8</span>Riemannian flow matching for proteins and crystals</h2>
+          <p>The scientific state spaces are not flat. Protein backbones can be represented by per-residue rigid frames
+            in \(SE(3)\); torsion and fractional coordinates live on tori; a straight Euclidean line between two
+            configurations can leave the manifold. <strong>Riemannian flow matching</strong> replaces the Euclidean
+            chord with a constant-speed <strong>geodesic</strong>, and the whole simulation-free objective goes through
+            unchanged: the regression target is the geodesic tangent \(\dot x_t\), computed through the exponential and
+            logarithm maps on manifolds with closed forms, and CFM is still a conditional expectation.
+            <strong>FoldFlow</strong> instantiates this on \(SE(3)\) frames for protein backbones, with OT
+            and stochastic couplings on the manifold; <strong>FlowMM</strong> instantiates it on the flat torus of
+            crystal fractional coordinates, using minimum-image geodesics and mean-centering to handle periodic
+            translation invariance. As in Week 2, the state space is the design choice; here it sets the interpolant.</p>
+          <figure class="fig"><img src="../../assets/figures/w3p4.png"
+              alt="Left, Euclidean interpolant lines crossing the unit cell and ignoring periodicity. Right, toroidal geodesics taking the short minimum-image path, wrapping across the boundary." loading="lazy" />
+            <figcaption>On the torus of fractional coordinates, the Euclidean interpolant (left) crosses the cell and
+              ignores periodicity; the geodesic (right) takes the minimum-image path, wrapping across the boundary. The
+              flow must live on the state space. <a href="problem-4.html">Problem 4</a> builds this end to end.</figcaption>
+          </figure>
+          <div class="source-note"><strong>From the readings.</strong> Chen &amp; Lipman (Riemannian FM), §3.2; Bose et
+            al. (FoldFlow); Miller et al. (FlowMM), §3. Built in <a href="problem-4.html">Problem 4</a>; revisited in
+            Weeks 10-11.</div>
+        </section>
+
+        <section id="ahead">
+          <h2><span class="num">9</span>Looking ahead: loosening the interpolant and the coupling</h2>
+          <p>This week fixed a deterministic, Euclidean interpolant and (mostly) an independent coupling. Both are free
+            choices. Week 4's <strong>stochastic interpolants</strong> add a noise term,
+            \(x_t=\alpha_t x_1+\beta_t x_0+\gamma_t z\), and recover flow matching, diffusion, and the reverse-time SDE
+            as different readings of one construction, with a velocity and a score objective on the same path. Week 5
+            then makes <strong>couplings and optimal transport</strong> the central tool, the minibatch OT you met in
+            Problem 3 generalized to control path crossing, stiffness, and the capacity spent moving noise into
+            scientific structure. The velocity you learned this week is the object both weeks reshape.</p>
+          <div class="source-note"><strong>From the readings.</strong> Sets up Week 4 (Albergo, Boffi &amp;
+            Vanden-Eijnden, Stochastic Interpolants) and Week 5 (Tong et al. and Multisample Flow Matching for couplings
+            and OT).</div>
+        </section>
+
+        <section id="recap">
+          <h2><span class="num">10</span>One-page recap</h2>
+          <ul>
+            <li>Pick a probability path between a base density and the data; flow matching learns the velocity that
+              transports mass along it. Diffusion is one curved member of this family.</li>
+            <li>The marginal velocity is the posterior-weighted average of conditional velocities (the marginalization
+              trick) and generates the marginal path via the continuity equation.</li>
+            <li>Conditional flow matching regresses on per-sample velocities; its gradient equals the intractable
+              marginal objective's, so its minimizer is the marginal velocity. Same conditional-mean argument as DSM.</li>
+            <li>Straight conditional paths give a curved marginal flow, because deterministic trajectories cannot cross.
+              Curvature sets the number of sampler steps.</li>
+            <li>Rectified flow's reflow re-pairs endpoints along the flow map, preserving the marginals while lowering
+              transport cost and straightening paths toward few-step sampling.</li>
+            <li>Any valid coupling keeps CFM unbiased but changes curvature; minibatch OT gives straighter flows at the
+              price of a batch-size bias.</li>
+            <li>Flow matching is simulation-free, well-conditioned, and path-flexible; on the same transformer backbone
+              a flow/interpolant objective beats diffusion on ImageNet (SiT), and rectified-flow transformers scale
+              (SD3, Movie Gen).</li>
+            <li>Riemannian flow matching replaces the straight line with a geodesic, carrying the objective onto
+              \(SE(3)\) frames (FoldFlow) and the torus of fractional coordinates (FlowMM).</li>
+          </ul>
+        </section>
+
+        <div class="nextprev">
+          <a href="../week3.html">← Week 3 overview</a>
+          <a href="problem-1.html">Start the problems →</a>
+        </div>
+      </article>
+      <aside class="side" aria-label="Page contents">
+        <div class="side-title">On this page</div>
+        <a href="#chosen-path">1. A chosen path</a>
+        <a href="#paths">2. Probability paths</a>
+        <a href="#cfm">3. Conditional flow matching</a>
+        <a href="#straight">4. Straightness &amp; curvature</a>
+        <a href="#reflow">5. Rectified flow &amp; reflow</a>
+        <a href="#couplings">6. Couplings &amp; OT</a>
+        <a href="#scaling">7. Why it scales</a>
+        <a href="#riemannian">8. Riemannian flow matching</a>
+        <a href="#ahead">9. Looking ahead</a>
+        <a href="#recap">10. Recap</a>
+      </aside>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap">Built as a lightweight course site. These notes condense the readings and link out to the
+      original papers.</div>
+  </footer>
+</body>
+
+</html>

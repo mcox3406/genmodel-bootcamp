@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 3 Problem 2 - Generative Modeling Bootcamp</title>
+  <meta name="description"
+    content="Formalize straightness and path curvature, show why straight conditional paths give a curved marginal flow, and prove that rectified flow's reflow preserves the marginals while reducing transport cost and straightening trajectories toward few-step sampling." />
+  <link rel="stylesheet" href="../../assets/style.css" />
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)'], ['$', '$']],
+        displayMath: [['\\[', '\\]']]
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head>
+
+<body>
+
+  <nav class="topbar">
+    <div class="wide">
+      <a class="brand" href="../../index.html">GenModel Bootcamp</a>
+      <nav class="navlinks" aria-label="Site">
+        <a href="../../index.html">Overview</a>
+        <a href="../../docs/syllabus.pdf">Syllabus</a>
+      </nav>
+      <nav class="weekstrip" aria-label="Weeks">
+        <span class="weekstrip-label">Week</span>
+        <a href="../week1.html">1</a><a href="../week2.html">2</a><a href="../week3.html" class="active">3</a><a
+          href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a
+          href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a
+          href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
+      </nav>
+    </div>
+  </nav>
+
+  <header class="page">
+    <div class="wrap">
+      <div class="kicker">Week 3 · Problem 2 of 4</div>
+      <h1 class="title">Straightness, path curvature, and rectified flow</h1>
+      <p class="subtitle">Why straight conditional paths still give a curved flow, and how reflow straightens it without
+        moving the marginals, the mechanism that turns flow matching into few-step generation.</p>
+      <nav class="actions" aria-label="Problem navigation"><a class="action" href="../week3.html">Week 3 overview</a><a
+          class="action" href="../../docs/syllabus.pdf">Syllabus</a></nav>
+    </div>
+  </header>
+  <main>
+
+    <div class="wide">
+      <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week3.html">Week 3</a> / Problem 2
+      </div>
+      <div class="problem-shell">
+        <article>
+          <div class="problem-meta"><span>derivation</span><span>Week 3</span><span>selected assignment</span></div>
+          <div class="prereq">
+            <div class="prereq-col">
+              <strong>Concepts you need</strong>
+              <ul>
+                <li>The marginal vector field and CFM unbiasedness from Problem 1</li>
+                <li>Local truncation error and order of an ODE integrator (Week 1, Problem 4)</li>
+                <li>Jensen's inequality and convexity of the squared norm</li>
+                <li>Uniqueness of ODE solutions and why deterministic trajectories cannot cross</li>
+                <li>Monge / Benamou-Brenier optimal transport at a conceptual level (Week 5 preview)</li>
+              </ul>
+            </div>
+            <div class="prereq-col">
+              <strong>If you get stuck</strong>
+              <ul>
+                <li><a href="https://arxiv.org/abs/2209.03003" target="_blank" rel="noopener">Liu et al. (Rectified
+                    Flow)</a>, §2.1-2.2 for the drift objective, reflow, and the straightness functional</li>
+                <li><a href="https://arxiv.org/abs/2210.02747" target="_blank" rel="noopener">Lipman et al.</a>, §6.2 for
+                  the sampling-efficiency argument</li>
+                <li><a href="https://arxiv.org/abs/2302.00482" target="_blank" rel="noopener">Tong et al.</a>, §3.2 for
+                  transport cost across couplings</li>
+                <li>Week 2 <a href="../week2/problem-2.html">Problem 2</a> for the deterministic-versus-stochastic and
+                  NFE-cost framing you reuse</li>
+              </ul>
+            </div>
+          </div>
+          <div class="source-note"><strong>Source note.</strong> Original derivation following <a
+              href="https://arxiv.org/abs/2209.03003" target="_blank" rel="noopener">Liu, Gong &amp; Liu (2022)</a>,
+            §2, with the transport-cost framing of <a href="https://arxiv.org/abs/2302.00482" target="_blank"
+              rel="noopener">Tong et al. (2023)</a> and the sampling-cost thread of <a
+              href="https://arxiv.org/abs/2210.02747" target="_blank" rel="noopener">Lipman et al. (2022)</a>, §6.2.</div>
+
+          <p>Problem 1 gave you a velocity you can train. This problem is about what makes it <em>fast</em>. A trained
+            flow is only as cheap to sample as its paths are easy to integrate, and the paths are easy exactly when they
+            are straight: a perfectly straight trajectory is integrated with a single Euler step and zero error. The
+            catch, and the whole subtlety of the week, is that choosing straight <em>conditional</em> interpolants does
+            not make the <em>marginal</em> flow straight. This problem quantifies the gap and derives the fix,
+            rectified flow's reflow, proving that it preserves the marginals while reducing transport cost.</p>
+          <div class="note">
+            <p><strong>Two straightnesses.</strong> Keep them apart. A <em>conditional</em> path \(x_t=(1-t)x_0+t
+              x_1\) is a straight line by construction, for a fixed endpoint pair. The <em>marginal</em> trajectory is
+              the path an actual sample follows under the learned ODE \(\dot x=u_t(x)\); it is generally curved, because
+              at each point the velocity is an average over many endpoint pairs. Straightness is a property of the
+              marginal flow, and it is what few-step sampling needs.</p>
+          </div>
+          <div class="note note-blue">
+            <p><strong>Idealized setting.</strong> Assume \(p_0,q\) have finite second moments, all relevant conditional
+              expectations exist, and the velocity is the exact population minimizer of the CFM objective so the induced
+              ODE has unique solutions; unless a part says otherwise, integration is exact too. Statements about
+              trajectories hold \(p_0\)-almost surely (the functionals below only constrain trajectories on the support
+              of the sampled flow). In Parts 3-4, "transport cost" means the endpoint coupling cost
+              \(T(\pi)=\mathbb E_\pi\|x_1-x_0\|^2\); keep it distinct from the kinetic energy of the marginal vector
+              field.</p>
+          </div>
+          <figure class="fig"><img src="../../assets/figures/w3p2.png"
+              alt="Left, curved marginal trajectories of the round-0 flow bending as they converge onto three modes. Right, the straightened reflow target: straight lines from each noise sample to its integrated endpoint, pairing the same marginals with much less crossing."
+              loading="lazy" />
+            <figcaption>Round 0 (left): the marginal trajectories of the trained flow bend, because independent-coupling
+              paths cross and deterministic trajectories cannot. Reflow (right) re-pairs each noise sample with the
+              data point the flow actually sent it to and regresses onto the straight line between them; the marginals
+              are unchanged but the paths are far straighter (parts 4-5).</figcaption>
+          </figure>
+          <ol class="parts">
+            <li><strong>Straightness and one-step error.</strong> Write \(Z_t\) for the ODE trajectory the velocity
+              \(v\) generates from \(Z_0\sim p_0\) (kept distinct from the interpolant \(x_t=(1-t)x_0+t x_1\) used
+              elsewhere), and define the <strong>trajectory straightness functional</strong>
+              \[ S(Z)=\int_0^1\mathbb E\big\|(Z_1-Z_0)-\dot Z_t\big\|^2\,\mathrm dt, \]
+              the time-averaged squared deviation of the instantaneous velocity \(\dot Z_t=v(Z_t,t)\) from the straight
+              chord direction. Show \(S(Z)=0\) if and only if \(p_0\)-almost every trajectory is a straight line
+              traversed at constant speed (the functional constrains only trajectories on the support of the sampled
+              flow), and that in this case a single Euler step \(Z_1=Z_0+v(Z_0,0)\) is <em>exact</em>. Then bound the
+              one-step path error by curvature alone, \(\big\|Z_1-(Z_0+v(Z_0,0))\big\|\le\int_0^1(1-t)\|\ddot
+              Z_t\|\,\mathrm dt\). For the \(N\)-step Euler method, note that curvature is not enough on its own: assume
+              in addition that \(v\) is \(L\)-Lipschitz and \(\|\ddot Z_t\|\le M\), and derive the standard \(O(M/N)\)
+              global error bound with the \(e^{L}\)-type stability factor that accounts for propagated local errors, so
+              that "straight" and "cheap to sample" are the same statement. (This trajectory straightness is distinct
+              from, though aligned with, the <em>straightness error</em> \(\widehat S\), the CFM training residual on
+              coupled interpolant points, that Problem 3 measures.)</li>
+            <li><strong>Straight conditional, curved marginal.</strong> Show by explicit example that straight
+              conditional paths give a curved marginal flow. Take the concrete 1D case \(x_0\sim\mathcal N(0,\sigma^2)\),
+              \(x_1\in\{-a,+a\}\) each with probability \(\tfrac12\) and independent of \(x_0\), and
+              \(x_t=(1-t)x_0+t x_1\). Using \(u_t(x)=\mathbb E[x_1-x_0\mid x_t=x]\) from Problem 1, derive
+              \[ u_t(x)=\frac{a\tanh\!\big(\tfrac{t a x}{(1-t)^2\sigma^2}\big)-x}{1-t}, \]
+              and evaluate the acceleration \(\partial_t u_t(x)+u_t(x)\,\partial_x u_t(x)\) at one concrete \((t,x)\) to
+              exhibit that it is nonzero, so the marginal trajectory bends. Explain the mechanism: independent-coupling
+              conditional lines <em>cross</em>, but the marginal ODE is deterministic and its trajectories cannot cross,
+              so the flow must curve to route around the crossings. Conclude that curvature is a property of the
+              coupling, not of the interpolant.</li>
+            <li><strong>Transport cost.</strong> Define the transport cost of a coupling \(\pi\),
+              \(\;T(\pi)=\mathbb E_{(x_0,x_1)\sim\pi}\|x_1-x_0\|^2\), which is the kinetic action of the
+              <em>noncausal</em> straight interpolation \(x_t=(1-t)x_0+t x_1\). Distinguish it from the kinetic energy
+              of the causal marginal ODE field, and prove by Jensen that the latter is never larger,
+              \(\int_0^1\mathbb E\|u_t(x_t)\|^2\mathrm dt\le\mathbb E\|x_1-x_0\|^2\). Show that among all couplings with
+              the fixed marginals \(p_0,q\), the transport cost is minimized by the quadratic optimal-transport (Monge)
+              coupling, whose displacement interpolation is straight and non-crossing (Benamou-Brenier). This is the
+              ideal that the reflow of part 4 and the minibatch OT of Problem 3 both chase. Be careful with the
+              takeaway: lower transport cost and straighter paths are <em>aligned</em> goals here, but not equivalent in
+              general, in \(d&gt;1\) a straight coupling need not be quadratic-cost optimal.</li>
+            <li><strong>The reflow operator.</strong> Let \(v^{(0)}\) be a trained flow from the independent coupling
+              \(\pi^{(0)}=p_0\otimes q\), with flow map \(G^{(0)}\) sending \(x_0\mapsto x_1\). Define the
+              <strong>reflow</strong> coupling \(\pi^{(1)}=\mathrm{law}\big(x_0,G^{(0)}(x_0)\big)\) and train a new flow
+              \(v^{(1)}\) by CFM on the straight lines of \(\pi^{(1)}\). Prove the two defining properties:
+              <em>(a) marginal preservation</em>, \(\pi^{(1)}\) has the same marginals \(p_0,q\) as \(\pi^{(0)}\) (so
+              reflow does not change the distribution being generated); and <em>(b) transport-cost non-increase</em>,
+              \(T(\pi^{(1)})\le T(\pi^{(0)})\), and more generally non-increase of any convex transport cost. For (b),
+              determinism of the new coupling is not itself enough (a deterministic map can have large cost): use
+              marginal preservation \(z_t\stackrel{d}{=}x_t\) along the rectified flow, the identity \(v_t(x)=\mathbb
+              E[x_1-x_0\mid x_t=x]\), and Jensen's inequality applied to the convex cost. State why exact reflow reaches
+              a deterministic coupling in one step, so iterating it drives the flow toward a straight, non-crossing
+              fixed point rather than merely toward determinism.</li>
+            <li><strong>Reflow does not hurt the marginals, in practice.</strong> The clean theory of part 4 assumes
+              exact training and integration. Explain the two error sources that make real reflow imperfect: the flow
+              map \(G^{(0)}\) is approximate, and each reflow round regresses on samples from the previous (approximate)
+              flow, so errors can compound. State the standard tradeoff, one or two reflow rounds straighten paths a lot
+              while distillation for genuine one-step sampling (Week 6) trades a further quality drop for speed, and
+              relate this to the deterministic-versus-stochastic cost discussion of Week 2 Problem 2.</li>
+            <li><strong>Why flow matching scales.</strong> Collect the reasons the objective is well-behaved at scale,
+              and be precise about each. (a) <em>Simulation-free</em>: the CFM loss of Problem 1 is a regression with no
+              ODE solve, no divergence, and no likelihood in the loop, unlike the adjoint training of a continuous
+              normalizing flow. (b) <em>Well-conditioned target</em>: the regression target is a finite-variance,
+              order-one velocity (not bounded, but with no explicit low-noise \(1/\sigma_t\) amplification of the kind
+              that appears in score parameterizations), so the loss stays order-one across \(t\) without the elaborate
+              EDM preconditioning of Week 2 (compare the two targets near \(t=1\)). (c) <em>Path freedom</em>:
+              straighter paths need fewer function evaluations at sampling time. Point to the empirical evidence:
+              <strong>SiT</strong> is the clean controlled case, beating <strong>DiT</strong> at matched backbone,
+              parameter count, and GFLOPs; <strong>Stable Diffusion 3</strong> compares rectified-flow against diffusion
+              formulations at scale but also changes architecture and training, so cite its controlled ablation rather
+              than "the same transformer." State which of (a)-(c) you think is doing the work, and how you would test
+              it.</li>
+            <li><strong>Curvature you can measure.</strong> Give two operational curvature diagnostics you will use in
+              Problem 3: (i) the straightness error \(\widehat S=\mathbb E_{(x_0,x_1),t}\|v_\theta(x_t,t)-(x_1-x_0)\|^2\),
+              the CFM residual on coupled interpolant points (and, optionally, the trajectory straightness \(S(Z)\)
+              estimated by Monte Carlo along sampled ODE trajectories), and (ii) the gap between a \(1\)-step and a
+              many-step Euler sample of the same initial noise. Argue that both should fall under OT coupling and under
+              reflow, and predict their qualitative shape as a function of
+              the number of function evaluations. This sets up the experiments.</li>
+          </ol>
+          <div class="why"><strong>Why this matters.</strong> Straightness is the hinge between "flow matching works"
+            and "flow matching is fast." The reflow argument is the first appearance of the finite-time-flow-map idea
+            that Week 6 turns into one-step and few-step generation, and the transport-cost view is the doorway to the
+            couplings and optimal transport of Week 5. Getting the conditional-versus-marginal straightness distinction
+            right is what keeps you from expecting a straight interpolant to give a straight sampler for free.</div>
+
+          <div class="pager"><a href="problem-1.html">← Problem 1: Conditional flow matching and the marginal vector
+              field</a><a href="problem-3.html">Problem 3: A toy flow, independent versus OT couplings →</a></div>
+        </article>
+        <aside class="problem-nav" aria-label="Week 3 problem navigation">
+          <a href="notes.html">Lecture notes</a>
+          <strong>Week 3 problems</strong>
+          <a href="problem-1.html">Problem 1: Conditional flow matching and the marginal vector field</a><a
+            class="current" href="problem-2.html">Problem 2: Straightness, path curvature, and rectified flow</a><a
+            href="problem-3.html">Problem 3: Coding lab: a toy flow, independent versus optimal-transport couplings</a><a
+            href="problem-4.html">Problem 4: Coding lab: Riemannian flow matching on the torus for crystal
+            coordinates</a>
+        </aside>
+      </div>
+    </div>
+
+  </main>
+  <footer>
+    <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes
+      remain the primary source material.</div>
+  </footer>
+</body>
+
+</html>

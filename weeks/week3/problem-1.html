@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 3 Problem 1 - Generative Modeling Bootcamp</title>
+  <meta name="description"
+    content="Build conditional flow matching from the ground up: probability paths, the marginal vector field via the marginalization trick, and the proof that the CFM objective has the same gradient as flow matching, with diffusion recovered as one Gaussian path." />
+  <link rel="stylesheet" href="../../assets/style.css" />
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)'], ['$', '$']],
+        displayMath: [['\\[', '\\]']]
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head>
+
+<body>
+
+  <nav class="topbar">
+    <div class="wide">
+      <a class="brand" href="../../index.html">GenModel Bootcamp</a>
+      <nav class="navlinks" aria-label="Site">
+        <a href="../../index.html">Overview</a>
+        <a href="../../docs/syllabus.pdf">Syllabus</a>
+      </nav>
+      <nav class="weekstrip" aria-label="Weeks">
+        <span class="weekstrip-label">Week</span>
+        <a href="../week1.html">1</a><a href="../week2.html">2</a><a href="../week3.html" class="active">3</a><a
+          href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a
+          href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a
+          href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
+      </nav>
+    </div>
+  </nav>
+
+  <header class="page">
+    <div class="wrap">
+      <div class="kicker">Week 3 · Problem 1 of 4</div>
+      <h1 class="title">Conditional flow matching and the marginal vector field</h1>
+      <p class="subtitle">Prove the two identities that make flow matching work: the marginal velocity generates the
+        marginal path, and the tractable conditional loss has the same gradient as the intractable one.</p>
+      <nav class="actions" aria-label="Problem navigation"><a class="action" href="../week3.html">Week 3 overview</a><a
+          class="action" href="../../docs/syllabus.pdf">Syllabus</a></nav>
+    </div>
+  </header>
+  <main>
+
+    <div class="wide">
+      <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week3.html">Week 3</a> / Problem 1
+      </div>
+      <div class="problem-shell">
+        <article>
+          <div class="problem-meta"><span>derivation</span><span>Week 3</span><span>selected assignment</span></div>
+          <div class="prereq">
+            <div class="prereq-col">
+              <strong>Concepts you need</strong>
+              <ul>
+                <li>Velocity fields, flow maps, and the continuity equation (Week 1, Sections 3-4)</li>
+                <li>The instantaneous change-of-variables / CNF picture from Week 1</li>
+                <li>Conditional expectation as the minimizer of squared error</li>
+                <li>The denoising-score-matching argument from Week 2 Problem 1</li>
+                <li>Gaussian densities and their score \(\nabla_x\log\mathcal N(x;\mu,\Sigma)\)</li>
+              </ul>
+            </div>
+            <div class="prereq-col">
+              <strong>If you get stuck</strong>
+              <ul>
+                <li><a href="https://arxiv.org/abs/2210.02747" target="_blank" rel="noopener">Lipman et al. (Flow
+                    Matching)</a>, §3 (Theorems 1 and 2) and §4.1</li>
+                <li><a href="https://arxiv.org/abs/2412.06264" target="_blank" rel="noopener">Flow Matching Guide</a>,
+                  §4.4 (marginalization trick) and §4.5 (the CFM loss)</li>
+                <li>Week 2 <a href="../week2/problem-1.html">Problem 1</a> for the same conditional-mean argument applied
+                  to the score</li>
+                <li>Week 1 <a href="../week1/problem-6.html">Problem 5/6</a> for flow matching first seen as
+                  conditional-expectation regression</li>
+              </ul>
+            </div>
+          </div>
+          <div class="source-note"><strong>Source note.</strong> Original problem assembling the standard
+            construction of <a href="https://arxiv.org/abs/2210.02747" target="_blank" rel="noopener">Lipman et al.
+              (2022)</a>, Theorems 1-2 and §4.1, with the coupling generalization of <a
+              href="https://arxiv.org/abs/2302.00482" target="_blank" rel="noopener">Tong et al. (2023)</a>, framed to
+            reuse the Week 2 denoising-score-matching argument.</div>
+
+          <p>This problem builds flow matching in one pass and proves the two facts everything else rests on. The setup
+            is deliberately parallel to Week 2. There, a fixed noising process defined a family of densities \(p_t\) and
+            you learned the score. Here <em>you</em> choose the family, called a <strong>probability path</strong>, and
+            learn a velocity. Fix a base distribution \(p_0=p_{\mathrm{noise}}\) (a standard Gaussian) and a data
+            distribution \(q=p_{\mathrm{data}}\), and interpolate. The whole method is the observation that although the
+            velocity you want is defined by an intractable marginal, you can train it with a tractable per-sample
+            regression, because the per-sample target has the right conditional mean, the identical move that made
+            denoising score matching work.</p>
+          <div class="note">
+            <p><strong>Convention.</strong> We put data at \(t=1\) and noise at \(t=0\), so the model transports
+              \(p_0=\mathcal N(0,I)\) to \(p_1=q\) as \(t\) runs forward. (Some references, including the MIT notes,
+              flip this; the algebra is identical under \(t\mapsto 1-t\).) Write \(x_0\sim p_0\), \(x_1\sim q\), and the
+              conditioning variable of the conditional path as \(x_1\) (later, as a coupling \((x_0,x_1)\)).</p>
+            <p><strong>Technical conventions.</strong> Work on \(\mathbb R^d\). Unless stated otherwise, all density and
+              continuity-equation identities below are for \(0&lt;t&lt;1\); the endpoint statements \(p_0=\mathcal N(0,I)\)
+              and \(p_1=q\) are understood as weak (limiting) statements, and since the losses draw \(t\) from a
+              continuous distribution, using \((0,1)\) rather than \([0,1]\) changes nothing. Assume \(q\) has finite
+              second moment; when it has no density, read \(\int f(x_1)\,q(x_1)\,\mathrm dx_1\) as \(\int
+              f(x_1)\,q(\mathrm dx_1)\). Assume enough smoothness, decay, and integrability to interchange
+              \(t\)-derivatives, divergences, and integrals, and in any part dividing by \(\sigma_t\) or \(\alpha_t\),
+              restrict to times where those are nonzero. It is cleanest to define the joint law \(x_1\sim q\),
+              \(x_t\mid x_1\sim p_t(\cdot\mid x_1)\) once and read every posterior below as a conditional expectation
+              under it.</p>
+          </div>
+          <div class="note note-blue">
+            <p><strong>Warm-up (optional, recommended).</strong> Do the Gaussian case in closed form first. Take
+              \(q=\mathcal N(m,s^2 I)\) and the straight path \(x_t=(1-t)x_0+t x_1\) with \(x_0\sim\mathcal N(0,I)\).
+              Show the marginal is \(p_t=\mathcal N\big(t m,\,((1-t)^2+t^2 s^2)I\big)\), and that the marginal velocity
+              \(u_t(x)=\mathbb E[x_1-x_0\mid x_t=x]\) is affine in \(x\). Every numbered part below is the general
+              (mixture / arbitrary-\(q\)) version of this one example, and Problem 3 trains exactly this object.</p>
+          </div>
+          <figure class="fig"><img src="../../assets/figures/w3p1.png"
+              alt="Left, at one point several per-sample conditional velocities point toward different data modes, and their weighted average is the marginal velocity. Right, the exact marginal velocity field at t=0.5 for a three-mode target, streamlines converging onto the three modes."
+              loading="lazy" />
+            <figcaption>The object you construct. At a point \(x\), each data sample \(x_1\) defines a conditional
+              velocity \(u_t(x\mid x_1)\) (blue); their posterior-weighted average is the marginal velocity \(u_t(x)\)
+              (red, left). Assembling this over all \(x\) gives the exact marginal field the network learns to
+              regress (right, part 2).</figcaption>
+          </figure>
+          <ol class="parts">
+            <li><strong>Conditional paths and conditional velocities.</strong> A <em>conditional probability path</em>
+              is a family \(p_t(x\mid x_1)\) with \(p_0(\cdot\mid x_1)=p_{\mathrm{noise}}\) and \(p_1(\cdot\mid
+              x_1)=\delta_{x_1}\) (concentrating on the data point as \(t\to1\)). For the straight interpolant
+              \(x_t=(1-t)x_0+t x_1\) with \(x_0\sim\mathcal N(0,I)\), show \(p_t(x\mid x_1)=\mathcal N\big(x;t
+              x_1,(1-t)^2 I\big)\), and that the deterministic conditional flow has velocity \(u_t(x\mid
+              x_1)=\dfrac{x_1-x}{1-t}\) (equivalently \(x_1-x_0\) written in terms of \(x_t\)). Confirm this velocity
+              generates the conditional path by checking the continuity equation \(\partial_t p_t(\cdot\mid
+              x_1)+\nabla\!\cdot\!\big(p_t(\cdot\mid x_1)\,u_t(\cdot\mid x_1)\big)=0\) from Week 1.</li>
+            <li><strong>The marginalization trick.</strong> Define the <em>marginal</em> path \(p_t(x)=\int p_t(x\mid
+              x_1)\,q(x_1)\,\mathrm dx_1\), which interpolates \(p_0=\mathcal N(0,I)\) and \(p_1=q\). Prove the central
+              identity: the marginal path is generated by the <strong>marginal vector field</strong>
+              \[ u_t(x)=\mathbb E\big[u_t(x\mid x_1)\mid x_t=x\big]=\int u_t(x\mid x_1)\,\frac{p_t(x\mid
+              x_1)\,q(x_1)}{p_t(x)}\,\mathrm dx_1. \]
+              Do it by substituting this definition into the continuity equation for \(p_t\): show \(\partial_t
+              p_t+\nabla\!\cdot(p_t u_t)=0\) follows by pushing the \(t\)-derivative and divergence through the integral
+              and using part 1 for each \(x_1\). This is Theorem 1 of Lipman et al.; state clearly where the
+              posterior weight \(p_t(x\mid x_1)q(x_1)/p_t(x)\) comes from and why \(u_t(x)\) is a genuine conditional
+              expectation.</li>
+            <li><strong>Why the marginal field is intractable, and the fix.</strong> Explain in one paragraph why
+              \(u_t(x)\) cannot be evaluated directly: the posterior over \(x_1\) requires the unknown normalizer
+              \(p_t(x)\), the same obstruction as the score in Week 2. The flow-matching loss that we would <em>like</em>
+              to minimize is therefore intractable,
+              \[ \mathcal L_{\mathrm{FM}}(\theta)=\mathbb E_{t,\,x\sim p_t}\big\|v_\theta(x,t)-u_t(x)\big\|^2, \]
+              with \(t\sim\mathcal U[0,1]\). State it, and note it has no usable gradient because \(u_t\) is unknown.</li>
+            <li><strong>CFM unbiasedness (the key theorem).</strong> Define the tractable <strong>conditional
+                flow-matching</strong> loss, which samples a data point and a time and regresses onto the per-sample
+              velocity,
+              \[ \mathcal L_{\mathrm{CFM}}(\theta)=\mathbb E_{t,\,x_1\sim q,\,x\sim p_t(\cdot\mid
+              x_1)}\big\|v_\theta(x,t)-u_t(x\mid x_1)\big\|^2. \]
+              Prove \(\nabla_\theta\mathcal L_{\mathrm{FM}}=\nabla_\theta\mathcal L_{\mathrm{CFM}}\), so the two losses
+              differ by a \(\theta\)-independent constant and have the same minimizer. Give the clean argument, not a
+              long expansion: expand both squared norms, note the \(\|v_\theta\|^2\) terms match because \(p_t(x\mid
+              x_1)q(x_1)\) marginalizes to \(p_t(x)\), and show the cross terms match because
+              \(\mathbb E[u_t(x\mid x_1)\mid x_t=x]=u_t(x)\) from part 2. Be precise about the conclusion: in the
+              unrestricted \(L^2(\mathrm dt\,;p_t(x)\mathrm dx)\) regression problem the unique minimizer is
+              \(v^\star(x,t)=u_t(x)\), so a sufficiently expressive network recovers the marginal velocity, exactly as
+              regressing on per-sample denoising targets recovered the score. For a restricted parameterized class
+              \(v_\theta\) the two losses still differ by the same \(\theta\)-independent constant, so they induce the
+              same gradients and the same optima within that class, but the optimum need not equal \(u_t\) exactly.
+              Identify the one line of this proof that is the same as the DSM proof in Week 2 Problem 1.</li>
+            <li><strong>Diffusion is one Gaussian path.</strong> Consider the general affine (Gaussian) path
+              \(p_t(x\mid x_1)=\mathcal N\big(x;\alpha_t x_1,\sigma_t^2 I\big)\) with boundary conditions
+              \(\alpha_0=0,\sigma_0=1\) and \(\alpha_1=1,\sigma_1=0\). Derive the conditional velocity
+              \(u_t(x\mid x_1)=\dot\alpha_t x_1+\dfrac{\dot\sigma_t}{\sigma_t}\big(x-\alpha_t x_1\big)\), and hence the
+              marginal velocity in terms of the denoiser \(\mathbb E[x_1\mid x_t=x]\). Show that (a) the straight
+              interpolant \(\alpha_t=t,\sigma_t=1-t\) gives the rectified-flow, or conditional straight-line, path of
+              part 1 (it is a <em>global</em> optimal-transport displacement interpolation only when the endpoint
+              coupling is itself an OT coupling, see part 7); and (b) the variance-preserving choice, characterized by
+              \(\alpha_t^2+\sigma_t^2=1\) with \(\alpha_0=0,\sigma_0=1,\alpha_1=1,\sigma_1=0\) (equivalently, in the
+              usual forward-diffusion time \(\tau=1-t\), \(\alpha_t=a_{1-t}\) and \(\sigma_t=\sqrt{1-a_{1-t}^2}\) with
+              \(a_\tau=\exp(-\tfrac12\int_0^\tau\beta(s)\,\mathrm ds)\)), reproduces the probability-flow ODE of Week 2.
+              So diffusion is the Gaussian path with a particular schedule; this is the sense in which flow matching
+              contains it. Compare signs and time direction against the Week 2 reverse-time formula.</li>
+            <li><strong>Velocity and score are one dictionary.</strong> For the affine path of part 5, prove the linear
+              relation \(u_t(x)=\dfrac{\dot\alpha_t}{\alpha_t}x-\sigma_t\Big(\dot\sigma_t-\dfrac{\dot\alpha_t}{\alpha_t}\sigma_t\Big)s_t(x)\)
+              with \(s_t=\nabla_x\log p_t\), valid where \(\alpha_t,\sigma_t&gt;0\) (so for \(0&lt;t&lt;1\)). The two-line route:
+              from the Gaussian mixture, \(s_t(x)=-\dfrac{x-\alpha_t\,\mathbb E[x_1\mid x_t=x]}{\sigma_t^2}\), hence
+              \(\mathbb E[x_1\mid x_t=x]=\dfrac{x+\sigma_t^2 s_t(x)}{\alpha_t}\); substitute into the marginal velocity
+              of part 5. A flow-matching velocity and a diffusion score are therefore interconvertible on a shared path.
+              Conclude that the choice between "learn the velocity" and "learn the score" is a
+              parameterization choice, not a different generative principle, and state which one the straight OT path
+              makes best-conditioned near \(t=1\) (the data end) and why (compare to the EDM preconditioning motivation
+              of Week 2 Problem 2).</li>
+            <li><strong>Couplings (a first look).</strong> So far each \(x_1\) is drawn independently and paired with a
+              fresh Gaussian \(x_0\); this is the <em>independent coupling</em>. Generalize the construction to an
+              arbitrary coupling \(\pi(x_0,x_1)\) with the correct marginals \(p_0,q\). The conditional path is now
+              deterministic, \(x_t=(1-t)x_0+t x_1\) with \((x_0,x_1)\sim\pi\) and velocity \(x_1-x_0\), so read the
+              continuity equation weakly, or equivalently set \(u_t(x)=\mathbb E[x_1-x_0\mid x_t=x]\) directly. Show
+              that parts 2 and 4 go through unchanged: the marginalization trick and CFM unbiasedness hold for any valid
+              coupling, only the posterior weighting changes. State the one thing the coupling <em>does</em> change: the
+              marginal velocity, and hence the curvature of the learned <em>marginal</em> ODE trajectories, not the
+              conditional chords \(x_t=(1-t)x_0+t x_1\), which are straight for every coupling. Flag that Problem 3 and
+              Week 5 exploit exactly this freedom.</li>
+          </ol>
+          <div class="why"><strong>Why this matters.</strong> These two identities, the marginalization trick and CFM
+            unbiasedness, are the entire theoretical content of the modern generative stack. Every model in the second
+            half of the course, from Stable Diffusion 3 to FoldFlow to FlowMM, is a choice of probability path,
+            coupling, and manifold layered on top of exactly this regression. Proving it once, and seeing it is the same
+            conditional-mean argument as the score, is what lets you read those papers as design decisions.</div>
+
+          <div class="pager"><a href="../week3.html">← Week 3 overview</a><a href="problem-2.html">Problem 2:
+              Straightness, path curvature, and rectified flow →</a></div>
+        </article>
+        <aside class="problem-nav" aria-label="Week 3 problem navigation">
+          <a href="notes.html">Lecture notes</a>
+          <strong>Week 3 problems</strong>
+          <a class="current" href="problem-1.html">Problem 1: Conditional flow matching and the marginal vector
+            field</a><a href="problem-2.html">Problem 2: Straightness, path curvature, and rectified flow</a><a
+            href="problem-3.html">Problem 3: Coding lab: a toy flow, independent versus optimal-transport couplings</a><a
+            href="problem-4.html">Problem 4: Coding lab: Riemannian flow matching on the torus for crystal
+            coordinates</a>
+        </aside>
+      </div>
+    </div>
+
+  </main>
+  <footer>
+    <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes
+      remain the primary source material.</div>
+  </footer>
+</body>
+
+</html>

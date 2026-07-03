@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 3 Problem 4 - Generative Modeling Bootcamp</title>
+  <meta name="description"
+    content="Build a miniature Riemannian flow-matching model on the flat torus of crystal fractional coordinates: geodesic interpolants with minimum-image wrapping, periodic translation invariance, and a comparison to naive Euclidean flow matching, the geometry behind FlowMM." />
+  <link rel="stylesheet" href="../../assets/style.css" />
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)'], ['$', '$']],
+        displayMath: [['\\[', '\\]']]
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head>
+
+<body>
+
+  <nav class="topbar">
+    <div class="wide">
+      <a class="brand" href="../../index.html">GenModel Bootcamp</a>
+      <nav class="navlinks" aria-label="Site">
+        <a href="../../index.html">Overview</a>
+        <a href="../../docs/syllabus.pdf">Syllabus</a>
+      </nav>
+      <nav class="weekstrip" aria-label="Weeks">
+        <span class="weekstrip-label">Week</span>
+        <a href="../week1.html">1</a><a href="../week2.html">2</a><a href="../week3.html" class="active">3</a><a
+          href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a
+          href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a
+          href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
+      </nav>
+    </div>
+  </nav>
+
+  <header class="page">
+    <div class="wrap">
+      <div class="kicker">Week 3 · Problem 4 of 4</div>
+      <h1 class="title">Coding lab: Riemannian flow matching on the torus for crystal coordinates</h1>
+      <p class="subtitle">Build the smallest flow matching that lives on the right space: a geodesic flow on the flat
+        torus of fractional coordinates, with minimum-image wrapping and periodic translation invariance, the core
+        geometry of FlowMM.</p>
+      <nav class="actions" aria-label="Problem navigation"><a class="action" href="../week3.html">Week 3 overview</a><a
+          class="action" href="../../docs/syllabus.pdf">Syllabus</a></nav>
+    </div>
+  </header>
+  <main>
+
+    <div class="wide">
+      <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week3.html">Week 3</a> / Problem 4
+      </div>
+      <div class="problem-shell">
+        <article>
+          <div class="problem-meta"><span>coding + geometry</span><span>Week 3</span><span>selected assignment</span>
+          </div>
+          <div class="prereq">
+            <div class="prereq-col">
+              <strong>Concepts you need</strong>
+              <ul>
+                <li>The CFM training and sampling loop from Problem 3</li>
+                <li>Straightness and geodesics as the manifold analogue of straight lines (Problem 2)</li>
+                <li>Fractional coordinates and periodic boundary conditions (Week 2 Problem 4's periodicity note)</li>
+                <li>Minimum-image convention and wrapping into the unit cell</li>
+                <li>Invariance vs equivariance and the invariant-base / equivariant-map argument (Weeks 1-2)</li>
+              </ul>
+            </div>
+            <div class="prereq-col">
+              <strong>If you get stuck</strong>
+              <ul>
+                <li><a href="https://arxiv.org/abs/2406.04713" target="_blank" rel="noopener">Miller et al. (FlowMM)</a>,
+                  §2.1 (crystal representation) and §3 (torus geometry, mean-free conditional vector field)</li>
+                <li><a href="https://arxiv.org/abs/2302.03660" target="_blank" rel="noopener">Chen &amp; Lipman
+                    (Riemannian FM)</a>, §3.2 for the geodesic conditional flow</li>
+                <li><a href="https://arxiv.org/abs/2310.02391" target="_blank" rel="noopener">Bose et al. (FoldFlow)</a>
+                  for the same idea on \(SE(3)\) frames</li>
+                <li>Week 2 <a href="../week2/problem-4.html">Problem 4</a> for the zero-CoG / gauge-fixing pattern you
+                  reuse for periodicity</li>
+              </ul>
+            </div>
+          </div>
+          <div class="source-note"><strong>Source note.</strong> Original lab. It is a deliberate miniature: the
+            flat-torus fractional-coordinate geometry and mean-free translation-invariant construction of <a
+              href="https://arxiv.org/abs/2406.04713" target="_blank" rel="noopener">FlowMM (Miller et al., 2024)</a>,
+            built on the geodesic conditional flow of <a href="https://arxiv.org/abs/2302.03660" target="_blank"
+              rel="noopener">Riemannian Flow Matching (Chen &amp; Lipman, 2023)</a>, in the coordinates-only setting
+            that strips away the lattice and atom types. Sanity checks in the spirit of Week 2 Problem 4.</div>
+
+          <div class="note">
+            <p><strong>Scope.</strong> A real crystal generator (FlowMM, CrystalFlow, Week 11) jointly flows the
+              fractional coordinates, the lattice, and the atom types, three spaces with different geometries. This lab
+              builds only the coordinate piece, the flat torus \([0,1)^{3n}\), because it is where the new idea lives:
+              the interpolant is a geodesic, not a straight line, and translation invariance is periodic.</p>
+          </div>
+
+          <div class="note note-blue">
+            <p><strong>Data layout.</strong> Use \(d=2\) for visualization and \(n\ge2\) atoms per configuration, so a
+              sample is a point cloud \(X\in\mathbb T^{n\times2}\), not a single point. Global translation invariance and
+              the radial distribution function are only meaningful for multi-atom configurations. Build a few toy motifs
+              whose atoms sit near opposite cell boundaries, perturb each site by a wrapped Gaussian
+              \(\mathrm{to\_cell}(\text{site}+\sigma\,\text{noise})\), and optionally apply a random global shift. Use a
+              half-open minimum-image convention so the measure-zero tie \(u=0.5\), where the shortest geodesic is not
+              unique, is handled deterministically.</p>
+          </div>
+
+          <p>Problem 3 trained a flow where the state was an unstructured vector in \(\mathbb R^d\). A crystal's atomic
+            positions are not unstructured: in fractional coordinates they live on a <strong>torus</strong>, because the
+            unit cell is periodic and coordinate \(0.99\) is next to \(0.01\), not far from it. A straight Euclidean
+            line between two fractional coordinates can take the long way around the cell, or leave \([0,1)\) entirely.
+            This lab builds the smallest flow that respects the periodicity, a Riemannian flow matching whose
+            conditional path is the toroidal geodesic, and shows exactly why the naive Euclidean flow fails. The point
+            is to see that the <em>interpolant</em>, not just the network, must know about the state space, the Week 3
+            analogue of Week 2's equivariant denoiser.</p>
+          <figure class="fig"><img src="../../assets/figures/w3p4.png"
+              alt="Left, Euclidean interpolant lines between random points and target sites cross the whole unit cell and ignore the periodic boundary. Right, toroidal geodesics take the minimum-image path, wrapping across the boundary, so paths are short and local."
+              loading="lazy" />
+            <figcaption>Why the geometry matters. Between a source point and a target site (star), the Euclidean
+              interpolant (left) can traverse the whole cell. The toroidal geodesic (right) takes the minimum-image
+              displacement, wrapping across the periodic boundary, so the path is short and stays physical. The flow
+              you build regresses onto the right column.</figcaption>
+          </figure>
+          <p>Implement a small set of functions with clean interfaces.</p>
+          <pre class="code">wrap_disp(u)                           # minimum-image displacement into [-0.5, 0.5)
+to_cell(x)                             # wrap coordinates into [0, 1)
+geodesic(x0, x1, t)                    # x_t = to_cell(x0 + t * wrap_disp(x1 - x0))
+velocity_target(x0, x1)                # wrap_disp(x1 - x0): geodesic conditional velocity
+mean_free(delta)                       # delta - atomwise mean: the FlowMM tangent-space fix
+cfm_loss_torus(model, x0, x1, t)       # || v_theta(x_t, t) - target ||^2
+sample_torus_ode(model, x0, n_steps)   # integrate on the torus, wrapping each step
+periodic_rdf(coords, cell)             # multi-atom RDF with minimum-image distances
+translation_error(model, X, shift)     # equivariance check under a global cell shift
+euclidean_baseline(...)                # same model, straight lines in R^d, no wrapping</pre>
+          <ol class="parts">
+            <li><strong>The torus and the geodesic interpolant.</strong> Build the multi-atom target described above:
+              several motifs \(X_1\in\mathbb T^{n\times2}\) (Wyckoff-like positions, some atoms near the cell edges so
+              wrapping matters), each site given a small wrapped Gaussian spread, as a stand-in for a crystal's
+              coordinate distribution. Take the base distribution to be <em>uniform</em> on the torus (the natural
+              periodic prior, not a Gaussian). Implement the geodesic
+              \(x_t=\mathrm{to\_cell}\big(x_0+t\,\mathrm{wrap\_disp}(x_1-x_0)\big)\), where \(\mathrm{wrap\_disp}\) is
+              the minimum-image displacement into \([-0.5,0.5)\), and show it is the shortest path on the flat torus.
+              Confirm its conditional velocity is the constant \(\mathrm{wrap\_disp}(x_1-x_0)\), the manifold analogue of
+              \(x_1-x_0\), so CFM applies verbatim with this target.</li>
+            <li><strong>Train the toroidal flow.</strong> Reuse the CFM loop of Problem 3 with two changes: form
+              \(x_t\) by the geodesic, and regress \(v_\theta(x_t,t)\) onto \(\mathrm{wrap\_disp}(x_1-x_0)\). The
+              velocity lives in the tangent space (for the flat torus, \(\mathbb R^2\) with periodic identification), but
+              a raw MLP on raw coordinates is <em>not</em> periodic in \(x\), so it will not respect
+              \(v_\theta(0,t)=v_\theta(1,t)\): either treat that as an intentional lab simplification, or feed periodic
+              features \(\phi(x)=(\sin2\pi x,\cos2\pi x)\) (and, for a translation-invariant model, wrapped pairwise
+              displacements). Integrate the ODE on the torus, wrapping into \([0,1)\) after each step, and confirm the
+              generated coordinates reproduce the target site distribution (compare a periodic radial distribution
+              function, using minimum-image distances, to the data).</li>
+            <li><strong>The Euclidean baseline fails.</strong> Now train the identical model with straight lines and no
+              wrapping: interpolate \(x_t=(1-t)x_0+t x_1\) in \(\mathbb R^2\), regress onto \(x_1-x_0\), and sample
+              without wrapping. Be precise about the <em>guaranteed</em> failure: it is topological, not leakage.
+              Euclidean chords ignore the identification \(0\sim1\), so they take the long way through the cell interior
+              instead of the short wrapped path across the boundary, which distorts the density near periodic boundaries
+              and splits or smears boundary-adjacent sites. Quantify it with the path-inefficiency ratio
+              \(\|x_1-x_0\|/\|\mathrm{wrap\_disp}(x_1-x_0)\|\), the boundary-region density error, and the periodic-RDF
+              (or wrapped energy-distance) error against the data. An out-of-cell fraction is only meaningful if you
+              deliberately run the baseline in \(\mathbb R^2\) without projection: with both endpoints inside
+              \([0,1)^2\) the straight interpolant stays in the cube during training, so leakage is a model
+              extrapolation artifact, not a necessary failure. This is the coordinate-space version of the warning at
+              the end of Week 2 Problem 4.</li>
+            <li><strong>Periodic translation invariance.</strong> A crystal's coordinates are only defined up to a
+              global shift of the origin: translating every atom by the same fractional vector (mod 1) is the same
+              crystal. Get the reason right: on the <em>compact</em> torus a translation-invariant density is perfectly
+              normalizable (the uniform density is one), so the issue is not non-normalizability but a <strong>gauge
+                redundancy</strong>, many fractional-coordinate representatives describe the same crystal, so the model
+              should either work on the quotient by global shifts or fix a gauge. Implement FlowMM's fix, which is a
+              <em>mean-free tangent velocity</em>, not a coordinate mean: an ordinary Euclidean mean does not transfer to
+              the torus, where the mean is branch-dependent and non-unique. With
+              \(\Delta_i=\mathrm{wrap\_disp}(x_{1,i}-x_{0,i})\) and \(\bar\Delta=\tfrac1n\sum_i\Delta_i\), train on the
+              mean-free target \(u_i^{\mathrm{mf}}=\Delta_i-\bar\Delta\) and integrate
+              \(x_t=\mathrm{to\_cell}(x_0+t\,u^{\mathrm{mf}})\); at \(t=1\) the path reaches a globally shifted copy of
+              \(x_1\), the same equivalence class rather than the original representative. Verify with
+              <code>translation_error</code> that a global cell shift of the input produces the correspondingly shifted
+              output (translation-equivariance), and that any shift-invariant observable of the generated crystal is
+              unchanged.</li>
+            <li><strong>Geodesic straightness and few-step sampling.</strong> Repeat the straightness and NFE
+              experiments of Problem 3 on the torus: geodesic conditional paths are the manifold "straight lines," so
+              the toroidal flow should again sample well in few steps, while the Euclidean baseline needs more steps and
+              still misses the boundary. Report the few-step comparison and the wrapped-distance energy metric, and note
+              that a minibatch OT coupling on the torus (using wrapped distances as the cost) would straighten further,
+              the FoldFlow-OT idea on a different manifold.</li>
+            <li><strong>Toward the real models.</strong> Write a short paragraph on two extensions you did <em>not</em>
+              implement. (a) <em>The full crystal</em>: FlowMM flows the lattice (a constrained matrix, Niggli-reduced
+              to fix the basis gauge) and the atom types (categorical, needing a discrete or relaxed flow, Week 7)
+              jointly with the coordinates; explain why their differing geometries make the relative "speed" of the
+              three flows a design decision, the periodic echo of the scale-mismatch issue in Week 2 Problem 2. (b)
+              <em>Protein frames</em>: FoldFlow runs the same construction on \(SE(3)=SO(3)\times\mathbb R^3\), where
+              the geodesic on \(SO(3)\) uses the matrix exponential and logarithm; state what changes (a non-abelian
+              group, curvature, the tangent space is no longer trivial) and what stays the same (geodesic conditional
+              path, CFM verbatim). Weeks 10 and 11 are these in full.</li>
+          </ol>
+          <div class="deliverable"><strong>Deliverable.</strong> <em>Required:</em> a short notebook with the toroidal
+            flow trained on the multi-atom fractional-site target, generated coordinates overlaid on the unit cell with
+            a periodic RDF against the data, the side-by-side failure of the Euclidean baseline at the boundary
+            (path-inefficiency ratio and boundary-density error), and the few-step comparison. <em>Optional / extra
+              credit:</em> the FlowMM-style mean-free translation-invariant variant with the translation-equivariance
+            check. Close with the paragraph placing your miniature relative to FlowMM and FoldFlow.</div>
+          <div class="why"><strong>Why this matters.</strong> This is the smallest complete instance of the idea that
+            dominates generative modeling for materials and proteins: the flow must live on the state space, and the
+            interpolant is where the geometry enters. Once you have built a geodesic flow on the torus and watched the
+            Euclidean baseline break at the boundary, FlowMM, CrystalFlow, and FoldFlow read as the same construction on
+            richer manifolds, exactly as the equivariant denoiser of Week 2 opened up the diffusion models.</div>
+
+          <div class="pager"><a href="problem-3.html">← Problem 3: A toy flow, independent versus OT couplings</a><a
+              href="../week4.html">Week 4: Stochastic interpolants as the unifying language →</a></div>
+        </article>
+        <aside class="problem-nav" aria-label="Week 3 problem navigation">
+          <a href="notes.html">Lecture notes</a>
+          <strong>Week 3 problems</strong>
+          <a href="problem-1.html">Problem 1: Conditional flow matching and the marginal vector field</a><a
+            href="problem-2.html">Problem 2: Straightness, path curvature, and rectified flow</a><a
+            href="problem-3.html">Problem 3: Coding lab: a toy flow, independent versus optimal-transport couplings</a><a
+            class="current" href="problem-4.html">Problem 4: Coding lab: Riemannian flow matching on the torus for
+            crystal coordinates</a>
+        </aside>
+      </div>
+    </div>
+
+  </main>
+  <footer>
+    <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes
+      remain the primary source material.</div>
+  </footer>
+</body>
+
+</html>

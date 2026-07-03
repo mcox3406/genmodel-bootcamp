@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 3: Flow matching, rectified flows, and scalable transformer generators</title>
+  <meta name="description"
+    content="Choosing the transport path directly: conditional flow matching, the marginal vector field, straightness and path curvature, rectified flow and reflow, why flow matching scales, and Riemannian flow matching for proteins and crystals." />
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)'], ['$', '$']],
+        displayMath: [['\\[', '\\]']]
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+
+<body>
+  <nav class="topbar">
+    <div class="wide">
+      <a class="brand" href="../index.html">GenModel Bootcamp</a>
+      <nav class="navlinks" aria-label="Site">
+        <a href="../index.html">Overview</a>
+        <a href="../docs/syllabus.pdf">Syllabus</a>
+      </nav>
+      <nav class="weekstrip" aria-label="Weeks">
+        <span class="weekstrip-label">Week</span>
+        <a href="week1.html">1</a><a href="week2.html">2</a><a href="week3.html" class="active">3</a><a
+          href="week4.html">4</a><a href="week5.html">5</a><a href="week6.html">6</a><a href="week7.html">7</a><a
+          href="week8.html">8</a><a href="week9.html">9</a><a href="week10.html">10</a><a href="week11.html">11</a><a
+          href="week12.html">12</a>
+      </nav>
+    </div>
+  </nav>
+
+  <header class="page">
+    <div class="wrap">
+      <div class="kicker">Week 3 of 12 · modern methods</div>
+      <h1 class="title">Flow matching, rectified flows, and scalable transformer generators</h1>
+      <p class="subtitle">Keep the flow-map view from Week 1 and drop the noising process. Instead of inheriting a
+        curved path from a diffusion, choose the interpolation from noise to data directly and regress a velocity onto
+        it. That one change is what makes generation straight, fast, and the technology that scales.</p>
+      <div class="meta"><span>methods + applications</span><span>derivation session</span><span>coding lab</span><span>4
+          problems</span></div>
+      <nav class="actions" aria-label="Week navigation">
+        <a class="action primary" href="week3/notes.html">Lecture notes</a>
+        <a class="action" href="#problems">Jump to problems</a>
+        <a class="action" href="week4.html">Week 4 →</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <div class="wide page-layout">
+      <article>
+        <section id="orientation">
+          <h2><span class="num">1</span>Orientation</h2>
+          <p class="lede">One idea carries the week. A probability path is any interpolation between a base density and
+            the data; flow matching regresses a velocity field onto a path you pick, rather than one handed down by a
+            noising process. The whole machinery, and the reason it scales, follows from choosing the path well.</p>
+          <figure class="fig"><img src="../assets/figures/w3-overview.png"
+              alt="Three panels: straight conditional interpolant lines connecting Gaussian noise points to a three-mode molecule-like target, the marginal velocity field those paths induce at an intermediate time, and few-step ODE sampling condensing noise onto the three modes in eight steps."
+              loading="lazy" />
+            <figcaption>The three objects that carry the week. A <strong>conditional path</strong> joins each noise
+              sample to a data sample by the straight interpolant \(x_t=(1-t)x_0+t x_1\) (left). Averaging the
+              per-sample velocities gives the <strong>marginal velocity field</strong> \(u_t(x)=\mathbb E[\dot x_t\mid
+              x_t=x]\) that a network learns by regression (center). Integrating it transports noise onto the data in a
+              handful of steps (right); the straighter the paths, the fewer steps it takes.</figcaption>
+          </figure>
+          <p>Week 2 left you with a working but slightly awkward object: the probability-flow ODE, a deterministic flow
+            whose velocity is built from the score, but whose path is <em>inherited</em> from a Gaussian noising process
+            fixed in advance. That path curves, and curved paths cost solver steps. Week 3 asks the obvious question. If
+            the probability-flow ODE is just a Week 1 flow, why accept the diffusion path at all? <strong>Flow
+              matching</strong> chooses the interpolation between base and data directly and regresses a velocity onto
+            it. The simplest choice, the straight conditional interpolant \(x_t=(1-t)x_0+t x_1\), makes each
+            <em>conditional</em> path a straight line; the field the network actually learns is the
+            <strong>marginal</strong> velocity, the conditional expectation of those per-sample velocities given the
+            current state. This is exactly the conditional-mean regression you used for the denoising objective in Week
+            2 and first met in Week 1 Problem 5, now applied to a velocity instead of a score.</p>
+          <p>Two facts make this more than a change of coordinates on diffusion. First, the objective is
+            <strong>simulation-free</strong>: the intractable marginal-matching loss and the tractable conditional loss
+            have the same gradient, so training is plain regression with no ODE solve, no divergence, and no likelihood
+            in the loop. That is why flow matching trains stably at the scale of Stable Diffusion 3 and Movie Gen, and
+            why controlled comparisons in SD3, SiT, and Movie Gen report advantages for flow and interpolant objectives
+            over diffusion formulations on comparable transformer setups. Second, the path is now a
+            <em>design variable</em>. Diffusion is one curved member of a large family, and the freedom to pick
+            straighter paths, or to straighten them after the fact with <strong>rectified flow</strong> and reflow, is
+            what buys few-step sampling. Straightness, path curvature, and the coupling between noise and data become the
+            objects you tune.</p>
+          <p>The scientific payoff is that the path can live on the right space. Molecular and crystalline state spaces
+            are rarely flat \(\mathbb R^d\): protein backbones are frames on \(SE(3)\), torsion and fractional
+            coordinates live on tori, and a straight Euclidean line between two configurations can leave the manifold
+            entirely. <strong>Riemannian flow matching</strong> replaces the straight line with a geodesic and the same
+            simulation-free objective goes through, which is the machinery behind FoldFlow for protein backbones and
+            FlowMM for crystals. The problems this week build that arc, from the conditional-flow-matching identity to a
+            toroidal flow for periodic crystal coordinates.</p>
+          <div class="note">
+            <p><strong>Flow matching, rectified flow, and stochastic interpolants.</strong> These names overlap and it
+              helps to fix them now. <em>Flow matching</em> is the objective, regress a velocity onto a chosen
+              probability path. <em>Conditional flow matching</em> (CFM) is its tractable, per-sample form.
+              <em>Rectified flow</em> starts from straight-line interpolants and learns the induced non-crossing
+              marginal flow; <em>reflow</em> is the iterative self-distillation that further straightens the learned
+              trajectories. <em>Stochastic interpolants</em> (Week 4) are the unifying framework that also
+              recovers the diffusion and SDE side. This week is the deterministic, Euclidean core; Weeks 4 and 5
+              generalize the interpolant and the coupling.</p>
+          </div>
+        </section>
+        <section id="goals">
+          <h2><span class="num">2</span>Learning goals</h2>
+          <ul>
+            <li>Construct the marginal probability path and marginal velocity field from conditional ones, and prove the
+              marginalization identity \(u_t(x)=\mathbb E[u_t(x\mid x_1)\mid x_t=x]\) that makes the marginal field
+              generate the marginal path.</li>
+            <li>Prove <strong>CFM unbiasedness</strong>: the flow-matching and conditional-flow-matching losses have the
+              same gradient, so the tractable per-sample objective has the marginal velocity as its minimizer, the same
+              bias-variance argument as denoising score matching.</li>
+            <li>Read diffusion as one Gaussian probability path among many, and convert between the learned velocity and
+              the score for affine paths; recover the probability-flow ODE as a special case.</li>
+            <li>Define straightness and path curvature, explain why straight <em>conditional</em> paths still give a
+              curved <em>marginal</em> flow, and show how rectified flow's reflow reduces transport cost and straightens
+              trajectories toward few-step sampling.</li>
+            <li>Explain why couplings between noise and data change path curvature, and why minibatch optimal-transport
+              pairings produce straighter flows than independent pairings (a taste of Week 5).</li>
+            <li>State why a scientific state space demands a Riemannian path, and how a geodesic interpolant on a torus
+              or on \(SE(3)\) keeps the flow on the manifold, the construction behind FlowMM and FoldFlow.</li>
+          </ul>
+        </section>
+        <section id="readings">
+          <h2><span class="num">3</span>Methods readings</h2>
+          <p>Read roughly in order. These trace flow matching from the identity that makes it trainable to the
+            transformer generators that made it the scalable default. Start with the quick tour in the Flow Matching
+            Guide for notation, then Lipman et al. for the marginalization construction and the CFM theorem, the two
+            results Problem 1 reproduces. Liu et al. add the straightness lineage, rectified flow and reflow, that
+            Problem 2 formalizes. Tong et al. generalize the construction to arbitrary couplings and give the
+            independent-versus-OT comparison that Problem 3 runs, a topic Week 5 finishes. The scaling papers, Stable
+            Diffusion 3, DiT, SiT, and Movie Gen, are the evidence that the objective survives contact with
+            billion-parameter models. Aim to see diffusion, rectified flow, and OT-CFM as different choices of path and
+            coupling inside one objective, not as separate methods. The <a href="week3/notes.html">lecture notes</a>
+            distill all of this with figures. Section pointers follow each paper's own numbering.</p>
+          <div class="reading-list">
+            <div class="reading">
+              <span class="label">Core notes</span>
+              <div class="title"><a href="https://diffusion.csail.mit.edu/2026/docs/lecture_notes.pdf" target="_blank"
+                  rel="noopener">Holderrieth &amp; Erives, An Introduction to Flow Matching and Diffusion Models (MIT
+                  6.S184), §3</a></div>
+              <p class="desc">The same source of notation continued from Weeks 1-2. §3 builds flow matching as
+                simulation-free CNF training: conditional and marginal probability paths, conditional and marginal
+                vector fields, the marginalization trick, and the CFM loss (§3.3 defines the flow-matching loss and then
+                the conditional version because the marginal field is not efficiently computable). This is the notation
+                spine the other readings hang on. Use §5 (guidance) only later, when you condition on a prompt.</p>
+            </div>
+            <div class="reading">
+              <span class="label">The foundation · 2022</span>
+              <div class="title"><a href="https://arxiv.org/abs/2210.02747" target="_blank" rel="noopener">Lipman et
+                  al., Flow Matching for Generative Modeling</a></div>
+              <p class="desc">The paper that names and organizes the method. Read §2 (CNF preliminaries), §3.1 with
+                Theorem 1 (the marginal vector field built from conditional ones generates the marginal path), §3.2 with
+                Theorem 2 (the CFM objective has the same gradient as the intractable flow-matching objective), and §4.1
+                (Gaussian conditional paths: Example I recovers diffusion, Example II is the straight-line OT path).
+                Skim §6.2 for the fewer-evaluations sampling argument. Problem 1 reproduces Theorems 1 and 2; this is
+                the central reading of the week.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Straightness &amp; reflow · 2022</span>
+              <div class="title"><a href="https://arxiv.org/abs/2209.03003" target="_blank" rel="noopener">Liu, Gong
+                  &amp; Liu, Flow Straight and Fast: Learning to Generate and Transfer Data with Rectified Flow</a></div>
+              <p class="desc">The straightness lineage. Read §2.1 (the rectified-flow ODE from a coupling and the
+                least-squares drift onto \(x_1-x_0\)), §2.2 (the reflow recursion, the straightness functional, and the
+                transport-cost results), and §2.3.1 (the explicit bridge to the probability-flow ODE and DDIM).
+                Problem 2 formalizes reflow and its marginal-preservation and transport-cost properties, and this is
+                where few-step generation is born.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Couplings, a taste · 2023</span>
+              <div class="title"><a href="https://arxiv.org/abs/2302.00482" target="_blank" rel="noopener">Tong et al.,
+                  Improving and Generalizing Flow-Based Generative Models with Minibatch Optimal Transport</a></div>
+              <p class="desc">Generalizes CFM to arbitrary source distributions and arbitrary couplings, then introduces
+                OT-CFM, which draws the noise-data pairing from a minibatch optimal-transport plan for straighter,
+                lower-variance flows. Read §3.1 (the general marginal vector field, Theorems 3.1-3.2), §3.2 with Table 1
+                and Figure 1 (the design-space map: VE, VP, FM, rectified flow, I-CFM, OT-CFM, SB-CFM all in one table),
+                and the I-CFM versus OT-CFM subsections. Problem 3 runs this comparison; Week 5 gives couplings and
+                optimal transport their full treatment.</p>
+            </div>
+            <div class="reading">
+              <span class="label">The reference · 2024</span>
+              <div class="title"><a href="https://arxiv.org/abs/2412.06264" target="_blank" rel="noopener">Lipman et
+                  al., Flow Matching Guide and Code</a></div>
+              <p class="desc">The best single self-contained reference; use it as the canonical notation source. Read §2
+                (quick tour) first, then §4 as needed (§4.4 the marginalization trick, §4.5 the CFM loss, §4.7-4.8
+                optimal-transport and affine conditional flows, §4.9 data couplings), and §10 for the explicit mapping
+                back to diffusion and the probability-flow ODE. The companion <a
+                  href="https://github.com/facebookresearch/flow_matching" target="_blank" rel="noopener">flow_matching
+                  library</a> mirrors the notation and is a clean starting point for Problems 3 and 4.</p>
+            </div>
+            <div class="reading">
+              <span class="label">It scales · 2024</span>
+              <div class="title"><a href="https://arxiv.org/abs/2403.03206" target="_blank" rel="noopener">Esser et al.,
+                  Scaling Rectified Flow Transformers for High-Resolution Image Synthesis (Stable Diffusion 3)</a></div>
+              <p class="desc">The headline evidence that flow matching scales. Read §2 (simulation-free training of
+                flows as a weighted objective), §3.1 (the logit-normal timestep sampler, the paper's main training
+                trick), §4 (the MM-DiT multimodal transformer), and §5.1 and §5.3 (a controlled bake-off where
+                rectified-flow formulations win, and validation loss tracks quality across model sizes). Read it for the
+                argument that the objective, not just the architecture, is what scales.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Transformer backbones · 2022-2024</span>
+              <div class="title"><a href="https://arxiv.org/abs/2212.09748" target="_blank" rel="noopener">Peebles
+                  &amp; Xie, Scalable Diffusion Models with Transformers (DiT)</a> and <a
+                  href="https://arxiv.org/abs/2401.08740" target="_blank" rel="noopener">Ma et al., SiT: Scalable
+                  Interpolant Transformers</a></div>
+              <p class="desc">The backbone and the controlled comparison. DiT §3.2 gives the patchify-plus-adaLN-Zero
+                transformer design that anchors the image-generation transformer family and is directly reused by SiT
+                (SD3 adapts the same lineage into MM-DiT), with §5.2 the compute-versus-quality scaling curves. SiT
+                holds that backbone fixed and ablates the recipe step by step, §2 (the interpolant framework linking
+                diffusion and flow) and §3 (discrete-to-continuous time, velocity versus score, interpolant choice, ODE
+                versus SDE), showing flow/interpolant training beats diffusion at every size. SiT's interpolant framing
+                is previewed here and completed in Week 4.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Foundation scale · 2024</span>
+              <div class="title"><a href="https://arxiv.org/abs/2410.13720" target="_blank" rel="noopener">Polyak et
+                  al. (Meta), Movie Gen: A Cast of Media Foundation Models</a></div>
+              <p class="desc">A 30B-parameter flow-matching video generator on a LLaMA3-like media transformer, the
+                proof point that the objective reaches foundation-model scale. It is a large report; read §3.1.2 (the
+                flow-matching training objective), §3.1.3 (the transformer backbone), and §3.1.6 (scaling and training
+                efficiency), and skim §3.6.2 for the flow-matching-versus-diffusion ablation. Skim the rest.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Optional · refinement</span>
+              <div class="title"><a href="https://arxiv.org/abs/2304.14772" target="_blank" rel="noopener">Pooladian et
+                  al., Multisample Flow Matching (2023)</a></div>
+              <p class="desc">Deepens the minibatch-coupling story of Tong et al. with joint couplings that preserve the
+                marginals while reducing gradient variance; pair it with Problem 3 and Week 5. Skim once the core papers
+                are solid. (The stochastic-interpolants framework of Albergo, Boffi &amp; Vanden-Eijnden generalizes
+                this whole picture to the SDE side, but it is a full Week 4 topic, so leave it until then rather than
+                opening it now.)</p>
+            </div>
+          </div>
+          <div class="note">
+            <p><strong>One dictionary: velocity and score.</strong> For an affine Gaussian path
+              \(x_t=\alpha_t x_1+\sigma_t\epsilon\) (data at \(t=1\), noise at \(t=0\)), the velocity flow matching
+              learns and the score diffusion learns are linear reparameterizations of one another,
+              \[ u_t(x)=\frac{\dot\alpha_t}{\alpha_t}\,x-\sigma_t\Big(\dot\sigma_t-\frac{\dot\alpha_t}{\alpha_t}\sigma_t\Big)\,s_t(x),
+              \qquad s_t(x)=\nabla_x\log p_t(x). \]
+              Predicting the velocity, the score, the noise, or the clean sample are parameterization choices on the
+              same probability path, exactly as in the Week 2 dictionary. Diffusion and flow matching differ in the
+              <em>path</em> (\(\alpha_t,\sigma_t\)) and the training target, not in the underlying transport. Keep this
+              open while reading §10 of the Guide.</p>
+          </div>
+        </section>
+        <section id="applications">
+          <h2><span class="num">4</span>Chemistry / materials application readings</h2>
+          <p>The scientific readings take flow matching off flat \(\mathbb R^d\) and onto the manifolds where molecules
+            and crystals actually live. The lesson mirrors Week 2's: the <em>state space sets the model</em>, only now
+            it sets the path. Start with Riemannian flow matching, which replaces the straight-line interpolant with a
+            geodesic and carries the whole simulation-free objective onto a manifold. Then FoldFlow puts it on
+            \(SE(3)\) frames for protein backbones, and FlowMM puts it on the torus of fractional coordinates for
+            crystals. Carry one question throughout: what does the straight interpolant become when a straight line
+            would leave the manifold, and how does the geodesic keep the flow on the physical space?</p>
+          <div class="note">
+            <p><strong>State space determines the interpolant.</strong> Why these papers replace the straight line
+              rather than reusing one flow:</p>
+            <ul>
+              <li>Cartesian coordinates: flat \(\mathbb R^{3n}\), modulo rigid motions; the straight interpolant works
+                as-is.</li>
+              <li>Fractional / torsion coordinates: a torus; the geodesic is the minimum-image displacement, wrapped
+                across the periodic boundary.</li>
+              <li>Protein-backbone frames: \(SE(3)=SO(3)\times\mathbb R^3\); the geodesic on \(SO(3)\) uses the
+                exponential and logarithm maps.</li>
+              <li>Atom types and bonds: categorical; a continuous flow needs a relaxation or a discrete analogue
+                (Week 7).</li>
+              <li>Lattices: continuous matrices with basis and symmetry ambiguity; a canonical (Niggli) reduction fixes
+                the gauge.</li>
+            </ul>
+          </div>
+          <div class="reading-list">
+            <div class="reading">
+              <span class="label">Theory backbone · 2023</span>
+              <div class="title"><a href="https://arxiv.org/abs/2302.03660" target="_blank" rel="noopener">Chen &amp;
+                  Lipman, Flow Matching on General Geometries (Riemannian Flow Matching)</a></div>
+              <p class="desc">Read this first; it is the manifold generalization the science papers instantiate. §3.1
+                gives the Riemannian conditional-flow-matching objective and probability path, and §3.2 constructs
+                conditional flows from a premetric, with the geodesic interpolant via the exponential and logarithm maps
+                as the leading case. Skim the protein/RNA torsion-angle experiments on tori in §5, the closest
+                simple-manifold analogue of crystal fractional coordinates. §3.3 (spectral distances on general
+                surfaces) is only needed for meshes.
+              </p>
+            </div>
+            <div class="reading">
+              <span class="label">Protein backbones · 2023</span>
+              <div class="title"><a href="https://arxiv.org/abs/2310.02391" target="_blank" rel="noopener">Bose et al.,
+                  SE(3)-Stochastic Flow Matching for Protein Backbone Generation (FoldFlow)</a></div>
+              <p class="desc">Flow matching over \(SE(3)\) rigid frames for protein backbones, and the first to show the
+                training-stability advantage over \(SE(3)\) diffusion. Read §2.1 and §2.3 (Lie-group geometry and the
+                frame parameterization: \(SE(3)=SO(3)\times\mathbb R^3\), a backbone as \(N\) frames), §3.1 (FoldFlow-Base,
+                the closed-form vector fields on the product manifold), §3.2 (FoldFlow-OT, Riemannian optimal-transport
+                couplings for straighter paths), and §3.3 (FoldFlow-SFM, stochastic bridges). Week 10 returns to
+                protein generation in full; here it is the manifold example.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Crystalline materials · 2024</span>
+              <div class="title"><a href="https://arxiv.org/abs/2406.04713" target="_blank" rel="noopener">Miller et
+                  al., FlowMM: Generating Materials with Riemannian Flow Matching</a></div>
+              <p class="desc">The direct materials reading, and the target Problem 4 builds a miniature of. Read §2.1
+                (the crystal representation: fractional coordinates on the flat torus \([0,1)^{3n}\), Niggli-reduced
+                lattice parameters, and atom-type encoding, with the symmetries that must be respected), §2.2 (a
+                condensed flow-matching recap), and §3 (the conditional vector fields on the crystal space, the torus
+                geometry via log/exp maps, and the mean-centering that enforces translation invariance under periodic
+                boundaries, the "how periodicity is handled" answer). Week 11 is crystals in full.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Molecular Boltzmann generators · 2023</span>
+              <div class="title"><a href="https://arxiv.org/abs/2306.15030" target="_blank" rel="noopener">Klein,
+                  Krämer &amp; Noé, Equivariant Flow Matching</a></div>
+              <p class="desc">Optimal-transport flow matching for equivariant CNFs that exploits the rotation and
+                permutation symmetries of a molecular target for simulation-free Boltzmann-generator training. Read the
+                OT-based equivariant objective and the alanine-dipeptide experiments; it is the molecular counterpart of
+                FoldFlow's OT couplings and connects the coupling idea of Problem 3 to a real energy landscape. Picked
+                up again in Week 10.</p>
+            </div>
+            <div class="reading">
+              <span class="label">Optional · diffusion contrast &amp; frontier</span>
+              <div class="title"><a href="https://arxiv.org/abs/2302.02277" target="_blank" rel="noopener">Yim et al.,
+                  FrameDiff (2023)</a>, <a href="https://arxiv.org/abs/2405.20313" target="_blank" rel="noopener">Huguet
+                  et al., FoldFlow-2 (2024)</a>, and <a href="https://arxiv.org/abs/2412.11693" target="_blank"
+                  rel="noopener">Luo et al., CrystalFlow (2024)</a></div>
+              <p class="desc">FrameDiff is the \(SE(3)\) <em>diffusion</em> model on the same frame geometry; read it
+                lightly to see FoldFlow as the flow-matching swap on identical state space (mainly a Week 10 topic).
+                FoldFlow-2 scales FoldFlow with a sequence encoder and RL fine-tuning. CrystalFlow is a clean
+                conditional-flow-matching alternative to FlowMM over lattice, coordinates, and types (a Week 11 topic).
+                Read for where the frontier went after the core papers.</p>
+            </div>
+          </div>
+        </section>
+        <section id="problems">
+          <h2><span class="num">5</span>Problems</h2>
+          <p>Four problems, each on its own page with full statements. Two derivations that build the machinery, the
+            CFM identity and then straightness and reflow, followed by two coding labs: a toy flow trained under
+            independent versus optimal-transport couplings, and a Riemannian flow on the torus of crystal fractional
+            coordinates.</p>
+          <ol class="problem-list">
+            <li><a href="week3/problem-1.html"><span><span class="p-title">Conditional flow matching and the marginal
+                    vector field</span></span><span class="p-kind">derivation</span></a></li>
+            <li><a href="week3/problem-2.html"><span><span class="p-title">Straightness, path curvature, and rectified
+                    flow</span></span><span class="p-kind">derivation</span></a></li>
+            <li><a href="week3/problem-3.html"><span><span class="p-title">Coding lab: a toy flow, independent versus
+                    optimal-transport couplings</span></span><span class="p-kind">coding + optimal transport</span></a>
+            </li>
+            <li><a href="week3/problem-4.html"><span><span class="p-title">Coding lab: Riemannian flow matching on the
+                    torus for crystal coordinates</span></span><span class="p-kind">coding + geometry</span></a></li>
+          </ol>
+          <h3>Discussion prompts</h3>
+          <ul>
+            <li>Flow matching and denoising score matching are both conditional-expectation regressions. What exactly is
+              being averaged in each, and why does that make both objectives simulation-free? Where does the
+              probability-flow ODE sit relative to the two?</li>
+            <li>Straight <em>conditional</em> paths do not make the <em>marginal</em> flow straight. Explain why, in
+              terms of trajectories that cannot cross, and what reflow does about it. What is the cost of straightening?
+            </li>
+            <li>Minibatch optimal-transport couplings give straighter, lower-variance flows, but only approximate the
+              population OT plan (exact OT is recovered when the batch reaches the support size). When is that
+              approximation worth paying for, and how would you detect it corrupting a scientific distribution?</li>
+            <li>A straight line between two protein backbones or two crystals can leave the manifold. Give a concrete
+              failure of naive Euclidean flow matching on fractional coordinates, and state what the geodesic
+              interpolant fixes.</li>
+            <li>Stable Diffusion 3 and SiT report that a flow objective beats a diffusion objective on the same
+              transformer. What is the mechanism, better-conditioned targets, straighter paths, lower-variance
+              gradients, and would you expect the same advantage on 3D molecular coordinates?</li>
+          </ul>
+        </section>
+        <section id="next">
+          <h2><span class="num">6</span>Connection to the next module</h2>
+          <p>This week fixed the deterministic, Euclidean core: pick a path, regress a velocity, straighten if you can.
+            But two choices were made silently. The interpolant was deterministic, a single line from \(x_0\) to
+            \(x_1\), and the coupling was independent, each noise sample paired with a random data sample. Both are
+            free.</p>
+          <p>Week 4 loosens the first. <strong>Stochastic interpolants</strong> add a noise term to the interpolant,
+            \(x_t=\alpha_t x_1+\beta_t x_0+\gamma_t z\), and recover flow matching, diffusion, and the reverse-time SDE
+            as different readings of one construction, with both a velocity and a score objective on the same path. The
+            deterministic flow of this week and the noising diffusion of last week become two endpoints of a single
+            family. Week 5 then loosens the second choice: couplings and optimal transport, the minibatch OT you tasted
+            in Problem 3, become the main tool for controlling path crossing, curvature, and how much model capacity is
+            spent moving noise into scientific structure. The velocity you learned this week is the object both weeks
+            reshape.</p>
+        </section>
+        <div class="nextprev">
+          <a href="week2.html">← Week 2: Diffusion, score models, and modern design space</a>
+          <a href="week4.html">Week 4: Stochastic interpolants as the unifying language →</a>
+        </div>
+      </article>
+      <aside class="side" aria-label="Page contents">
+        <div class="side-title">On this page</div>
+        <a href="week3/notes.html">Lecture notes →</a>
+        <a href="#orientation">Orientation</a>
+        <a href="#goals">Learning goals</a>
+        <a href="#readings">Methods readings</a>
+        <a href="#applications">Application readings</a>
+        <a href="#problems">Problems</a>
+        <a href="#next">Next connection</a>
+      </aside>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap">Built as a lightweight course site. Source pages are intentionally short and link out to papers,
+      notes, and code.</div>
+  </footer>
+</body>
+
+</html>

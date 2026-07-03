@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 3 Problem 3 - Generative Modeling Bootcamp</title>
+  <meta name="description"
+    content="Train a toy conditional-flow-matching model on a 2D target, compare independent and minibatch optimal-transport couplings, and measure straightness, transport cost, few-step sampling error, and the batch-size bias of minibatch OT." />
+  <link rel="stylesheet" href="../../assets/style.css" />
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)'], ['$', '$']],
+        displayMath: [['\\[', '\\]']]
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head>
+
+<body>
+
+  <nav class="topbar">
+    <div class="wide">
+      <a class="brand" href="../../index.html">GenModel Bootcamp</a>
+      <nav class="navlinks" aria-label="Site">
+        <a href="../../index.html">Overview</a>
+        <a href="../../docs/syllabus.pdf">Syllabus</a>
+      </nav>
+      <nav class="weekstrip" aria-label="Weeks">
+        <span class="weekstrip-label">Week</span>
+        <a href="../week1.html">1</a><a href="../week2.html">2</a><a href="../week3.html" class="active">3</a><a
+          href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a
+          href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a
+          href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
+      </nav>
+    </div>
+  </nav>
+
+  <header class="page">
+    <div class="wrap">
+      <div class="kicker">Week 3 · Problem 3 of 4</div>
+      <h1 class="title">Coding lab: a toy flow, independent versus optimal-transport couplings</h1>
+      <p class="subtitle">Train conditional flow matching on a 2D target two ways, with random pairings and with
+        minibatch optimal-transport pairings, and measure exactly what the coupling buys: straighter paths and cheaper
+        sampling, at the price of a batch-size bias.</p>
+      <nav class="actions" aria-label="Problem navigation"><a class="action" href="../week3.html">Week 3 overview</a><a
+          class="action" href="../../docs/syllabus.pdf">Syllabus</a></nav>
+    </div>
+  </header>
+  <main>
+
+    <div class="wide">
+      <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week3.html">Week 3</a> / Problem 3
+      </div>
+      <div class="problem-shell">
+        <article>
+          <div class="problem-meta"><span>coding + optimal transport</span><span>Week 3</span><span>selected
+              assignment</span></div>
+          <div class="prereq">
+            <div class="prereq-col">
+              <strong>Concepts you need</strong>
+              <ul>
+                <li>The CFM loss and its unbiasedness from Problem 1</li>
+                <li>Straightness, curvature, and transport cost from Problem 2</li>
+                <li>The Week 1 ODE-solver scaffold (Euler/Heun), reused here for sampling</li>
+                <li>A small MLP in PyTorch or JAX, conditioned on time \(t\)</li>
+                <li>A linear-assignment or Sinkhorn routine for minibatch OT</li>
+              </ul>
+            </div>
+            <div class="prereq-col">
+              <strong>If you get stuck</strong>
+              <ul>
+                <li><a href="https://arxiv.org/abs/2302.00482" target="_blank" rel="noopener">Tong et al. (OT-CFM)</a>,
+                  §3.2 and Figure 1 for I-CFM versus OT-CFM</li>
+                <li><a href="https://github.com/facebookresearch/flow_matching" target="_blank"
+                    rel="noopener">flow_matching library</a> for a reference CFM loop</li>
+                <li><a href="https://pythonot.github.io/" target="_blank" rel="noopener">POT (Python Optimal
+                    Transport)</a> for <code>emd</code> (exact) and <code>sinkhorn</code> plans</li>
+                <li>The <a href="notes.html#straight">straightness section</a> of the notes for the metrics you will
+                  reproduce</li>
+              </ul>
+            </div>
+          </div>
+          <div class="source-note"><strong>Source note.</strong> Original lab. The independent-versus-OT comparison
+            follows <a href="https://arxiv.org/abs/2302.00482" target="_blank" rel="noopener">Tong et al. (2023)</a>,
+            §3.2 and Figure 1; the rectified-flow straightness metrics follow <a
+              href="https://arxiv.org/abs/2209.03003" target="_blank" rel="noopener">Liu et al. (2022)</a>. This is the
+            coding half of the Week 3 assignment.</div>
+
+          <p>This lab trains a real flow-matching model, on a 2D target chosen so you can see the paths. You will
+            implement conditional flow matching once and swap only the <em>coupling</em>, the rule for pairing a noise
+            sample with a data sample, between the independent pairing of Problem 1 and a minibatch optimal-transport
+            pairing. Everything you proved in Problems 1 and 2 becomes measurable: both couplings train to the same
+            target distribution (CFM is unbiased for any valid coupling), but the OT coupling gives straighter
+            trajectories, lower transport cost, and better few-step samples. You will also find the catch, minibatch OT
+            is biased at finite batch size, and measure it.</p>
+          <figure class="fig"><img src="../../assets/figures/w3p3.png"
+              alt="Left, independent coupling draws long crossing straight lines between Gaussian noise and a three-mode target, mean squared displacement 3.29. Right, the minibatch OT coupling gives short, nearly non-crossing lines, mean squared displacement 0.87."
+              loading="lazy" />
+            <figcaption>The coupling is the whole experiment. Independent pairing (left) connects noise to random data,
+              producing long crossing straight lines and a large transport cost. The minibatch OT pairing (right)
+              matches nearby points, giving short, nearly non-crossing lines, roughly a quarter of the cost here. Both
+              induce the same marginals; only the paths differ.</figcaption>
+          </figure>
+          <div class="note note-blue">
+            <p><strong>Default setup (use unless a part says otherwise).</strong> Target: a balanced 3-component
+              Gaussian mixture in \(\mathbb R^2\) with means \((2,0),(-1,\sqrt3),(-1,-\sqrt3)\) and covariance
+              \(0.05\,I\) per component; base \(\mathcal N(0,I)\). Hold the architecture, optimizer, number of training
+              steps, seeds, and evaluation sample size fixed across all methods; the coupling is the only thing that
+              changes. Two moons is an optional extension. <strong>Metrics.</strong> Report the <em>straightness
+                error</em> on held-out coupled pairs, \(\widehat S=\mathbb E_{(x_0,x_1),t}\|v_\theta((1-t)x_0+t
+              x_1,t)-(x_1-x_0)\|^2\) (lower is better) — this is the CFM training residual on coupled interpolant
+              points, the cheap surrogate for the trajectory straightness \(S(Z)\) of Problem 2, aligned with it but
+              evaluated on the fitted regression rather than the sampled ODE path — the transport cost \(\widehat
+              C=\mathbb E\|x_1-x_0\|^2\) of the same held-out coupling, and the energy distance
+              \[ \widehat D_E^2(A,B)=\frac{2}{mn}\sum_{i,j}\|a_i-b_j\|-\frac{1}{m^2}\sum_{i,j}\|a_i-a_j\|-\frac{1}{n^2}\sum_{i,j}\|b_i-b_j\|. \]
+              Evaluate with 10,000 generated and 10,000 target samples, \(\mathrm{NFE}\in\{1,2,4,8,16,32,64\}\), and
+              \(B\in\{16,32,64,128,256\}\); call a sampler "within tolerance" when its energy distance is within 10% of
+              that model's best 64-NFE score.</p>
+          </div>
+          <p>Implement a small set of functions with clean interfaces.</p>
+          <pre class="code">sample_base(n, rng)                    # standard Gaussian x0
+sample_data(n, rng)                    # 2D target: default 3-mode MoG (see setup box)
+interpolant(x0, x1, t)                 # straight path x_t = (1-t)x0 + t x1
+independent_coupling(x0, x1)           # pair the B base and B data samples by index
+ot_coupling(x0, x1)                    # exact linear assignment, squared-Euclidean cost
+cfm_loss(model, x0, x1, t)             # || v_theta(x_t, t) - (x1 - x0) ||^2
+sample_ode(model, x0, n_steps)         # Euler/Heun integration t: 0 -> 1
+straightness_error(model, x0, x1)      # S-hat on held-out coupled pairs; lower is better
+transport_cost(x0, x1)                 # mean ||x1 - x0||^2 of the coupling
+energy_distance(a, b)                  # sample distance between generated and data</pre>
+          <ol class="parts">
+            <li><strong>Baseline: independent CFM.</strong> Train a small time-conditioned MLP \(v_\theta(x,t)\) with
+              the CFM loss under the independent coupling: each minibatch draws \(B\) independent base samples
+              \(x_0\sim\mathcal N(0,I)\) and \(B\) independent data samples \(x_1\sim q\), pairs them by minibatch index
+              (no OT matching or sorting), samples \(t\sim\mathcal U[0,1]\), forms \(x_t\), and regresses onto
+              \(x_1-x_0\). Sample
+              with a many-step Euler/Heun integrator and confirm the generated distribution matches the target (overlay
+              on the density, and report the energy distance). This is your unbiased reference; keep the trained model.</li>
+            <li><strong>Minibatch OT-CFM.</strong> Change one thing. Within each minibatch of size \(B\), solve the
+              exact linear-assignment (optimal-transport) problem between the \(B\) noise points and the \(B\) data
+              points under squared-Euclidean cost with equal weights, and use the resulting matched pairs
+              \((x_0,x_1)\) as the coupling before forming \(x_t\). (Entropic Sinkhorn is optional; it returns a soft
+              plan rather than a matching, so if you use it, either sample pairs from the normalized plan or take a
+              barycentric target, and state which.) Train an otherwise identical model. Verify it also matches the
+              target distribution, so in the ideal CFM limit the coupling did not change what is generated, only how.</li>
+            <li><strong>Straightness and transport cost.</strong> For both trained models, estimate the
+              <em>straightness error</em> \(\widehat S=\mathbb E_{(x_0,x_1),t}\|v_\theta((1-t)x_0+t x_1,t)-(x_1-x_0)\|^2\)
+              on a held-out set of coupled pairs drawn from the <em>same</em> coupling used to train that model (average
+              over \(K\) random times per pair), and the realized transport cost \(\widehat C=\mathbb E\|x_1-x_0\|^2\).
+              Report both; lower is better for each. You should find OT-CFM has markedly lower transport cost and lower
+              straightness error, matching Problem 2's prediction. Plot a handful of generated ODE trajectories from
+              each model, as in the figure, to see the crossing difference.</li>
+            <li><strong>Few-step sampling: the payoff.</strong> This is the point. For both models, plot a sample-quality
+              metric (energy distance to the data, or per-mode population error) against the number of <em>network
+                function evaluations</em>, from 1 up to 64, using Euler steps. Show that OT-CFM reaches good samples in
+              far fewer evaluations, and that at a large step budget the gap should narrow as ODE discretization error
+              is removed. Do not expect exact convergence: any residual gap is model, optimization, or
+              coupling-approximation error, not discretization error, and you should say which. Identify the smallest
+              NFE at which each is within tolerance, and connect the curve to the one-step-error bound of Problem 2.</li>
+            <li><strong>The batch-size effect.</strong> Minibatch OT is a biased approximation to the population OT
+              coupling: at finite \(B\) the plan over a random size-\(B\) subset induces a different coupling, vector
+              field, and transport cost than population OT, approaching it only as \(B\) grows. Crucially, in the ideal
+              CFM limit any valid coupling still has the correct endpoint marginals; so the effect to measure is a
+              <em>practical</em> one, where finite \(B\), finite training, and coarse ODE sampling interact. Retrain
+              OT-CFM at several batch sizes \(B\) and show that straightness error falls as \(B\) grows, while very
+              small \(B\) can worsen sample quality or mode balance (an over-eager local matching that ignores the
+              global geometry). Characterize the regime where minibatch OT helps without hurting, and state why this is
+              exactly the tradeoff Week 5 formalizes with entropic OT and Sinkhorn.</li>
+            <li><strong>One reflow round.</strong> Implement the reflow of Problem 2 on the independent-coupling model:
+              generate endpoint pairs \((x_0,G^{(0)}(x_0))\) by integrating the trained flow, then retrain a fresh model
+              by CFM on the straight lines between them. Show that a single reflow round lowers the straightness error
+              \(\widehat S\) and improves few-step samples, approaching OT-CFM, and check that the generated marginals
+              are preserved. Discuss which
+              is preferable in practice, OT coupling during training or reflow after it, and at what cost.</li>
+            <li><strong>Dimension (optional).</strong> Repeat the straightness and few-step comparison as you raise the
+              data dimension (embed the 2D target in \(\mathbb R^{d}\) with structured or noise dimensions, or use a
+              Gaussian-mixture target in higher \(d\)). Report how the OT-versus-independent gap scales, and connect to
+              why couplings matter more, and minibatch OT gets harder, in the high-dimensional molecular and materials
+              settings of the second half of the course.</li>
+          </ol>
+          <div class="deliverable"><strong>Deliverable.</strong> A short notebook that trains I-CFM and OT-CFM on the
+            same 2D target, overlays generated samples and a few trajectories for each, and produces two plots: (i)
+            sample quality versus NFE for both couplings (plus one reflow round), and (ii) straightness and transport
+            cost versus batch size for OT-CFM. Close with a paragraph on when the minibatch-OT bias is worth paying.
+            Reuse the Week 1 solver scaffold for sampling.</div>
+          <div class="why"><strong>Why this matters.</strong> This is the smallest experiment that separates the two
+            levers flow matching gives you, the path and the coupling, and shows the coupling is a low-overhead lever
+            for better few-step sampling, at the price of an OT solve and a finite-batch approximation. The same OT-CFM
+            machinery, scaled up, is what Week 5 uses for coarse-to-fine and low-to-high-fidelity scientific transport,
+            and the batch-size tradeoff you measure here is the practical wall every application runs into.</div>
+
+          <div class="pager"><a href="problem-2.html">← Problem 2: Straightness, path curvature, and rectified
+              flow</a><a href="problem-4.html">Problem 4: Riemannian flow matching on the torus →</a></div>
+        </article>
+        <aside class="problem-nav" aria-label="Week 3 problem navigation">
+          <a href="notes.html">Lecture notes</a>
+          <strong>Week 3 problems</strong>
+          <a href="problem-1.html">Problem 1: Conditional flow matching and the marginal vector field</a><a
+            href="problem-2.html">Problem 2: Straightness, path curvature, and rectified flow</a><a class="current"
+            href="problem-3.html">Problem 3: Coding lab: a toy flow, independent versus optimal-transport couplings</a><a
+            href="problem-4.html">Problem 4: Coding lab: Riemannian flow matching on the torus for crystal
+            coordinates</a>
+        </aside>
+      </div>
+    </div>
+
+  </main>
+  <footer>
+    <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes
+      remain the primary source material.</div>
+  </footer>
+</body>
+
+</html>
