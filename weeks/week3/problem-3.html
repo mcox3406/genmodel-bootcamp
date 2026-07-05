@@ -13,7 +13,8 @@
     window.MathJax = {
       tex: {
         inlineMath: [['\\(', '\\)'], ['$', '$']],
-        displayMath: [['\\[', '\\]']]
+        displayMath: [['\\[', '\\]']],
+    tags: 'all'
       },
       svg: { fontCache: 'global' }
     };
@@ -24,22 +25,7 @@
 
 <body>
 
-  <nav class="topbar">
-    <div class="wide">
-      <a class="brand" href="../../index.html">GenModel Bootcamp</a>
-      <nav class="navlinks" aria-label="Site">
-        <a href="../../index.html">Overview</a>
-        <a href="../../docs/syllabus.pdf">Syllabus</a>
-      </nav>
-      <nav class="weekstrip" aria-label="Weeks">
-        <span class="weekstrip-label">Week</span>
-        <a href="../week1.html">1</a><a href="../week2.html">2</a><a href="../week3.html" class="active">3</a><a
-          href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a
-          href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a
-          href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
-      </nav>
-    </div>
-  </nav>
+  <aside class="booknav" data-root="../.." aria-label="Course contents"></aside>
 
   <header class="page">
     <div class="wrap">
@@ -156,7 +142,7 @@ energy_distance(a, b)                  # sample distance between generated and d
               Report both; lower is better for each. You should find OT-CFM has markedly lower transport cost and lower
               straightness error, matching Problem 2's prediction. Plot a handful of generated ODE trajectories from
               each model, as in the figure, to see the crossing difference.</li>
-            <li><strong>Few-step sampling: the payoff.</strong> This is the point. For both models, plot a sample-quality
+            <li><strong>Few-step sampling.</strong> This is the comparison the coupling was chosen for. For both models, plot a sample-quality
               metric (energy distance to the data, or per-mode population error) against the number of <em>network
                 function evaluations</em>, from 1 up to 64, using Euler steps. Show that OT-CFM reaches good samples in
               far fewer evaluations, and that at a large step budget the gap should narrow as ODE discretization error
@@ -215,6 +201,7 @@ energy_distance(a, b)                  # sample distance between generated and d
     <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes
       remain the primary source material.</div>
   </footer>
+<script src="../../assets/nav.js" defer></script>
 </body>
 
 </html>

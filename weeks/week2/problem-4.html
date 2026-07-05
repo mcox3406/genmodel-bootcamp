@@ -11,7 +11,8 @@
 window.MathJax = {
   tex: {
     inlineMath: [['\\(', '\\)'], ['$', '$']],
-    displayMath: [['\\[', '\\]']]
+    displayMath: [['\\[', '\\]']],
+    tags: 'all'
   },
   svg: { fontCache: 'global' }
 };
@@ -21,19 +22,7 @@ window.MathJax = {
 </head>
 <body>
 
-<nav class="topbar">
-  <div class="wide">
-    <a class="brand" href="../../index.html">GenModel Bootcamp</a>
-    <nav class="navlinks" aria-label="Site">
-      <a href="../../index.html">Overview</a>
-      <a href="../../docs/syllabus.pdf">Syllabus</a>
-    </nav>
-    <nav class="weekstrip" aria-label="Weeks">
-      <span class="weekstrip-label">Week</span>
-      <a href="../week1.html">1</a><a href="../week2.html" class="active">2</a><a href="../week3.html">3</a><a href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
-    </nav>
-  </div>
-</nav>
+<aside class="booknav" data-root="../.." aria-label="Course contents"></aside>
 
 <header class="page">
   <div class="wrap">
@@ -91,7 +80,7 @@ net_force_torque(score, x)            # sum_i s_i and sum_i x_i x s_i (should va
 <li><strong>Reflections and chirality.</strong> An EGNN built from distances is equivariant not only to rotations and translations but also to <em>reflections</em> and node permutations, so it realizes the full \(E(3)\) (which includes reflections), not \(SE(3)\). Verify this: your <code>equiv_error_rot</code> stays tiny even for \(Q\) with \(\det Q=-1\). Explain the consequence, an \(O(3)\)-invariant generative model treats a molecule and its mirror image as equiprobable, which is harmless for achiral ethanol but wrong for a stereochemically fixed chiral molecule such as alanine dipeptide. State what extra ingredient (a chirality-sensitive, reflection-<em>odd</em> feature, i.e. reducing the group to \(SE(3)\)) would be needed, and why this lab uses an achiral molecule.</li>
 <li><strong>Train.</strong> Reuse the EDM-preconditioned denoising loss from Problem 3, projecting both the added noise and the denoiser output onto the zero-CoG subspace so the dynamics never leave it. Train, plot the loss, and confirm the equivariance error stays negligible throughout.</li>
 <li><strong>Generate and validate beyond bonds.</strong> Sample new conformers with the Heun probability-flow ODE in the zero-CoG subspace. Keep the bonded graph fixed and diffuse only coordinates (the GeoDiff setting) so "validity" is well defined. Validate physically with at least one nonlocal quantity in addition to bond lengths and angles: the torsion-angle distribution, a nonbonded clash rate or pairwise-distance-matrix statistic, or a signed-volume/chirality diagnostic. Report how many samples have all bonds within tolerance and whether the torsion populations match the data.</li>
-<li><strong>Invariance, tested pathwise.</strong> Demonstrate the payoff of equivariance without retraining. For the deterministic sampler, show \(G(Qz)=Q\,G(z)\) on the <em>same</em> initial Gaussian cloud \(z\) (for a stochastic sampler, rotate the initial state and every Gaussian increment together); conclude that the distribution of any rotation-invariant observable is exactly invariant, the GeoDiff construction of an equivariant transition kernel on an invariant prior. As an additional exact-symmetry diagnostic, prove and check that for the exact score of a translation- and rotation-invariant density the net score-force and score-torque vanish, \(\sum_i s_i(x)=0\) and \(\sum_i x_i\times s_i(x)=0\); these are concrete "zero net force / zero net torque" checks a physicist will recognize.</li>
+<li><strong>Invariance, tested pathwise.</strong> Demonstrate the effect of equivariance without retraining. For the deterministic sampler, show \(G(Qz)=Q\,G(z)\) on the <em>same</em> initial Gaussian cloud \(z\) (for a stochastic sampler, rotate the initial state and every Gaussian increment together); conclude that the distribution of any rotation-invariant observable is exactly invariant, the GeoDiff construction of an equivariant transition kernel on an invariant prior. As an additional exact-symmetry diagnostic, prove and check that for the exact score of a translation- and rotation-invariant density the net score-force and score-torque vanish, \(\sum_i s_i(x)=0\) and \(\sum_i x_i\times s_i(x)=0\); these are concrete "zero net force / zero net torque" checks a physicist will recognize.</li>
 <li><strong>Toward the real models.</strong> Write a short paragraph on two extensions you did <em>not</em> implement. (a) Atom types: E(3)-EDM diffuses a continuous relaxation of discrete types jointly with coordinates; explain the scale-mismatch issue from Problem 2 that the differing natural scales of types and coordinates raise. (b) Periodicity: a crystal is not just "rotation and translation replaced by a space group." It adds coordinates taken modulo lattice translations, periodic neighbor images with minimum-image geometry, a variable lattice/cell, non-uniqueness under change of lattice basis, and possibly a material-specific space group. State concretely what fails if a nonperiodic molecular denoiser is applied unchanged: distances across cell boundaries are wrong, wrapped coordinates are discontinuous, the lattice is absent, and equivalent cell representations need not get equivalent predictions. (Weeks 10 and 11 are these in full.)</li>
 </ol>
 <div class="deliverable"><strong>Deliverable.</strong> A short notebook with the numerical equivariance check (equivariant vs plain network, including a reflection), the training curve, generated conformers with bond, angle, and torsion distributions overlaid on the data, and the pathwise invariance test \(G(Qz)=Q\,G(z)\) with the net score-force/torque check. A short note placing your hybrid relative to E(3)-EDM and GeoDiff and listing what atom types and periodicity would add.</div>
@@ -111,5 +100,6 @@ net_force_torque(score, x)            # sum_i s_i and sum_i x_i x s_i (should va
 <footer>
   <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes remain the primary source material.</div>
 </footer>
+<script src="../../assets/nav.js" defer></script>
 </body>
 </html>

@@ -12,30 +12,16 @@
   <link rel="stylesheet" href="../../assets/style.css" />
   <script>
     window.MathJax = {
-      tex: { inlineMath: [['\\(', '\\)'], ['$', '$']], displayMath: [['\\[', '\\]']] },
+      tex: { inlineMath: [['\\(', '\\)'], ['$', '$']], displayMath: [['\\[', '\\]']],
+    tags: 'all' },
       svg: { fontCache: 'global' }
     };
   </script>
   <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 
-<body>
-  <nav class="topbar">
-    <div class="wide">
-      <a class="brand" href="../../index.html">GenModel Bootcamp</a>
-      <nav class="navlinks" aria-label="Site">
-        <a href="../../index.html">Overview</a>
-        <a href="../../docs/syllabus.pdf">Syllabus</a>
-      </nav>
-      <nav class="weekstrip" aria-label="Weeks">
-        <span class="weekstrip-label">Week</span>
-        <a href="../week1.html">1</a><a href="../week2.html">2</a><a href="../week3.html" class="active">3</a><a
-          href="../week4.html">4</a><a href="../week5.html">5</a><a href="../week6.html">6</a><a
-          href="../week7.html">7</a><a href="../week8.html">8</a><a href="../week9.html">9</a><a
-          href="../week10.html">10</a><a href="../week11.html">11</a><a href="../week12.html">12</a>
-      </nav>
-    </div>
-  </nav>
+<body data-chapter="3">
+  <aside class="booknav" data-root="../.." aria-label="Course contents"></aside>
 
   <header class="page">
     <div class="wrap">
@@ -64,7 +50,7 @@
         </div>
 
         <section id="chosen-path">
-          <h2><span class="num">1</span>From an inherited path to a chosen one</h2>
+          <h2><span class="num">3.1</span>From an inherited path to a chosen one</h2>
           <p>Week 2 ended on the probability-flow ODE: diffusion is, underneath, a deterministic Week 1 flow whose
             velocity is built from the score. But its path is inherited from a Gaussian noising process and it curves,
             which is why sampling needs many steps. Flow matching makes the path a <strong>choice</strong>. Fix a base
@@ -78,7 +64,7 @@
         </section>
 
         <section id="paths">
-          <h2><span class="num">2</span>Probability paths and the marginal vector field</h2>
+          <h2><span class="num">3.2</span>Probability paths and the marginal vector field</h2>
           <p>Build the path from pieces you can write down. A <strong>conditional path</strong> \(p_t(x\mid x_1)\)
             interpolates the base density and a single data point \(x_1\); for the \(\sigma_{\min}=0\) straight
             interpolant \(x_t=(1-t)x_0+t x_1\) with \(x_0\sim\mathcal N(0,I)\), and for \(t&lt;1\), it is the Gaussian
@@ -106,7 +92,7 @@
         </section>
 
         <section id="cfm">
-          <h2><span class="num">3</span>Conditional flow matching and its unbiasedness</h2>
+          <h2><span class="num">3.3</span>Conditional flow matching and its unbiasedness</h2>
           <p>The intractable objective is to match the marginal field, \(\mathbb E_{t,x\sim p_t}\|v_\theta-u_t\|^2\).
             <strong>Conditional flow matching</strong> replaces it with a tractable per-sample regression: draw a data
             point, a time, and a point on its conditional path, and regress onto the conditional velocity,</p>
@@ -134,7 +120,7 @@
         </section>
 
         <section id="straight">
-          <h2><span class="num">4</span>Straightness, curvature, and the cost of sampling</h2>
+          <h2><span class="num">3.4</span>Straightness, curvature, and the cost of sampling</h2>
           <p>A trained flow is only as cheap to sample as its trajectories are straight. Straightness is a property of
             the learned ODE trajectory \(Z_t\), not of the training interpolant: define the <strong>straightness
               functional</strong> \(S(Z)=\int_0^1\mathbb E\|(Z_1-Z_0)-\dot Z_t\|^2\mathrm dt\), which is zero exactly
@@ -162,7 +148,7 @@
         </section>
 
         <section id="reflow">
-          <h2><span class="num">5</span>Rectified flow and reflow</h2>
+          <h2><span class="num">3.5</span>Rectified flow and reflow</h2>
           <p>Rectified flow fixes the curvature after the fact. Train a flow from the independent coupling, then use its
             flow map \(G\) to re-pair each noise sample with the generated endpoint reached by integrating the current
             flow, and retrain on the straight lines of the new coupling \(\pi^{(1)}=\mathrm{law}(x_0,G(x_0))\). In the
@@ -185,7 +171,7 @@
         </section>
 
         <section id="couplings">
-          <h2><span class="num">6</span>Couplings and optimal transport</h2>
+          <h2><span class="num">3.6</span>Couplings and optimal transport</h2>
           <p>The marginalization trick and CFM unbiasedness hold for <em>any</em> valid coupling \(\pi(x_0,x_1)\) with
             the right marginals, not just the independent one. The coupling does not change what is generated, but it
             changes the curvature. The extreme case is the 2-Wasserstein optimal-transport coupling, whose displacement
@@ -207,7 +193,7 @@
         </section>
 
         <section id="scaling">
-          <h2><span class="num">7</span>Why it scales: transformer generators</h2>
+          <h2><span class="num">3.7</span>Why it scales: transformer generators</h2>
           <p>Flow matching is not just cleaner theory; it is what large generators are trained with. The objective is
             <strong>simulation-free</strong> (a regression with no ODE solve, divergence, or likelihood in the loop),
             its velocity target in common interpolant and rectified-flow setups avoids the endpoint score singularities
@@ -224,7 +210,7 @@
         </section>
 
         <section id="riemannian">
-          <h2><span class="num">8</span>Riemannian flow matching for proteins and crystals</h2>
+          <h2><span class="num">3.8</span>Riemannian flow matching for proteins and crystals</h2>
           <p>The scientific state spaces are not flat. Protein backbones can be represented by per-residue rigid frames
             in \(SE(3)\); torsion and fractional coordinates live on tori; a straight Euclidean line between two
             configurations can leave the manifold. <strong>Riemannian flow matching</strong> replaces the Euclidean
@@ -247,7 +233,7 @@
         </section>
 
         <section id="ahead">
-          <h2><span class="num">9</span>Looking ahead: loosening the interpolant and the coupling</h2>
+          <h2><span class="num">3.9</span>Looking ahead: loosening the interpolant and the coupling</h2>
           <p>This week fixed a deterministic, Euclidean interpolant and (mostly) an independent coupling. Both are free
             choices. Week 4's <strong>stochastic interpolants</strong> add a noise term,
             \(x_t=\alpha_t x_1+\beta_t x_0+\gamma_t z\), and recover flow matching, diffusion, and the reverse-time SDE
@@ -261,7 +247,7 @@
         </section>
 
         <section id="recap">
-          <h2><span class="num">10</span>One-page recap</h2>
+          <h2><span class="num">3.10</span>One-page recap</h2>
           <ul>
             <li>Pick a probability path between a base density and the data; flow matching learns the velocity that
               transports mass along it. Diffusion is one curved member of this family.</li>
@@ -308,6 +294,7 @@
     <div class="wrap">Built as a lightweight course site. These notes condense the readings and link out to the
       original papers.</div>
   </footer>
+<script src="../../assets/nav.js" defer></script>
 </body>
 
 </html>

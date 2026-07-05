@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 6: One-step and few-step generation</title>
+  <meta name="description" content="A reading, derivation, and coding course on generative modeling for molecules and materials." />
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  
+</head>
+<body data-chapter="6">
+<aside class="booknav" data-root=".." aria-label="Course contents"></aside>
+<header class="page">
+  <div class="wrap">
+    <div class="kicker">Week 6 of 12 · the design space</div>
+    <h1 class="title">One-step and few-step generation</h1>
+    <nav class="actions" aria-label="Week navigation"><a class="action" href="week5.html">← Week 5</a><a class="action primary" href="week7.html">Week 7 →</a></nav>
+  </div>
+</header>
+<main>
+  
+<div class="wrap">
+<section>
+  <h2><span class="num">6.1</span>Why this week matters</h2>
+  <p class="lede">The question this week is whether we can sample well in one to eight function evaluations without fragile distillation.</p>
+  <p><strong>Theory target.</strong> Finite-time flow maps, semigroup consistency, average velocity, and distillation versus training from scratch.</p>
+</section>
+<section>
+  <h2><span class="num">6.2</span>Reading guide</h2>
+  <div class="reading-grid">
+    <div class="reading-card"><h3>Quick review</h3><p class="link-list"><a href="https://arxiv.org/abs/2303.01469" target="_blank" rel="noopener">Consistency Models</a>, <a href="https://arxiv.org/abs/2202.00512" target="_blank" rel="noopener">Progressive Distillation</a></p></div>
+    <div class="reading-card"><h3>Current methods</h3><p class="link-list"><a href="https://arxiv.org/abs/2506.14603" target="_blank" rel="noopener">Align Your Flow</a>, <a href="https://arxiv.org/abs/2505.13447" target="_blank" rel="noopener">MeanFlow</a>, <a href="https://arxiv.org/abs/2503.07565" target="_blank" rel="noopener">IMM</a>, <a href="https://arxiv.org/abs/2602.16813" target="_blank" rel="noopener">Flow Map Language Models</a>, <a href="https://arxiv.org/abs/2604.27147" target="_blank" rel="noopener">Flow Map Reward Guidance</a></p></div>
+    <div class="reading-card"><h3>Scientific anchors</h3><p class="link-list"><a href="https://www.nature.com/articles/s41586-025-08628-5" target="_blank" rel="noopener">MatterGen</a>, <a href="https://arxiv.org/abs/2406.04713" target="_blank" rel="noopener">FlowMM</a>, <a href="https://openreview.net/forum?id=4dAgG8ma3B" target="_blank" rel="noopener">ChemGuide</a></p></div>
+  </div>
+  <p><strong>Assignment.</strong> Learn a finite-time map, measure semigroup error, and compare direct maps with vector-field integration.</p>
+</section>
+
+<section>
+  <h2><span class="num">6.3</span>Assignment placeholder</h2>
+  <p>The detailed problem set for this week will be written in the same style as Week 1: one or two derivation checks, one implementation, and one scientific critique. For now, use the assignment prompt above as the target.</p>
+</section>
+<div class="nextprev"><a href="week5.html">← Week 5: Couplings, optimal transport, and data-dependent bases</a><a href="week7.html">Week 7: Discrete, categorical, and hybrid continuous-discrete generation →</a></div>
+</div>
+</main>
+<footer>
+  <div class="wrap">Generative modeling for molecules and materials. Built as a lightweight course site, not a standalone textbook.</div>
+</footer>
+<script src="../assets/nav.js" defer></script>
+</body>
+</html>

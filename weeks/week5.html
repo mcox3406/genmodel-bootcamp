@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 5: Couplings, optimal transport, and data-dependent bases</title>
+  <meta name="description" content="A reading, derivation, and coding course on generative modeling for molecules and materials." />
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="../assets/style.css" />
+  
+</head>
+<body data-chapter="5">
+<aside class="booknav" data-root=".." aria-label="Course contents"></aside>
+<header class="page">
+  <div class="wrap">
+    <div class="kicker">Week 5 of 12 · the design space</div>
+    <h1 class="title">Couplings, optimal transport, and data-dependent bases</h1>
+    <nav class="actions" aria-label="Week navigation"><a class="action" href="week4.html">← Week 4</a><a class="action primary" href="week6.html">Week 6 →</a></nav>
+  </div>
+</header>
+<main>
+  
+<div class="wrap">
+<section>
+  <h2><span class="num">5.1</span>Why this week matters</h2>
+  <p class="lede">Couplings determine path crossing, stiffness, curvature, and how much capacity the model wastes moving arbitrary noise into scientific structures.</p>
+  <p><strong>Theory target.</strong> Entropic OT, minibatch Sinkhorn, dynamic OT intuition, rectification, and data-dependent bases.</p>
+</section>
+<section>
+  <h2><span class="num">5.2</span>Reading guide</h2>
+  <div class="reading-grid">
+    <div class="reading-card"><h3>Quick review</h3><p class="link-list"><a href="https://arxiv.org/abs/2412.06264" target="_blank" rel="noopener">Flow Matching Guide</a>, <a href="https://arxiv.org/abs/2310.03725" target="_blank" rel="noopener">Stochastic Interpolants Couplings</a></p></div>
+    <div class="reading-card"><h3>Current methods</h3><p class="link-list"><a href="https://arxiv.org/abs/2209.03003" target="_blank" rel="noopener">Rectified Flow</a></p></div>
+    <div class="reading-card"><h3>Scientific anchors</h3><p class="link-list"><a href="https://www.science.org/doi/10.1126/science.aaw1147" target="_blank" rel="noopener">Boltzmann Generators</a>, <a href="https://arxiv.org/abs/2406.04713" target="_blank" rel="noopener">FlowMM</a>, <a href="https://arxiv.org/abs/2502.02582" target="_blank" rel="noopener">OMatG</a></p></div>
+  </div>
+  <p><strong>Assignment.</strong> Implement minibatch Sinkhorn and design a scientific base distribution for one task.</p>
+</section>
+
+<section>
+  <h2><span class="num">5.3</span>Assignment placeholder</h2>
+  <p>The detailed problem set for this week will be written in the same style as Week 1: one or two derivation checks, one implementation, and one scientific critique. For now, use the assignment prompt above as the target.</p>
+</section>
+<div class="nextprev"><a href="week4.html">← Week 4: Stochastic interpolants as the unifying language</a><a href="week6.html">Week 6: One-step and few-step generation →</a></div>
+</div>
+</main>
+<footer>
+  <div class="wrap">Generative modeling for molecules and materials. Built as a lightweight course site, not a standalone textbook.</div>
+</footer>
+<script src="../assets/nav.js" defer></script>
+</body>
+</html>

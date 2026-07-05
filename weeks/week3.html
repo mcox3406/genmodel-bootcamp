@@ -14,7 +14,8 @@
     window.MathJax = {
       tex: {
         inlineMath: [['\\(', '\\)'], ['$', '$']],
-        displayMath: [['\\[', '\\]']]
+        displayMath: [['\\[', '\\]']],
+    tags: 'all'
       },
       svg: { fontCache: 'global' }
     };
@@ -22,31 +23,16 @@
   <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 
-<body>
-  <nav class="topbar">
-    <div class="wide">
-      <a class="brand" href="../index.html">GenModel Bootcamp</a>
-      <nav class="navlinks" aria-label="Site">
-        <a href="../index.html">Overview</a>
-        <a href="../docs/syllabus.pdf">Syllabus</a>
-      </nav>
-      <nav class="weekstrip" aria-label="Weeks">
-        <span class="weekstrip-label">Week</span>
-        <a href="week1.html">1</a><a href="week2.html">2</a><a href="week3.html" class="active">3</a><a
-          href="week4.html">4</a><a href="week5.html">5</a><a href="week6.html">6</a><a href="week7.html">7</a><a
-          href="week8.html">8</a><a href="week9.html">9</a><a href="week10.html">10</a><a href="week11.html">11</a><a
-          href="week12.html">12</a>
-      </nav>
-    </div>
-  </nav>
+<body data-chapter="3">
+  <aside class="booknav" data-root=".." aria-label="Course contents"></aside>
 
   <header class="page">
     <div class="wrap">
-      <div class="kicker">Week 3 of 12 · modern methods</div>
+      <div class="kicker">Week 3 of 12 · learning the dynamics</div>
       <h1 class="title">Flow matching, rectified flows, and scalable transformer generators</h1>
       <p class="subtitle">Keep the flow-map view from Week 1 and drop the noising process. Instead of inheriting a
         curved path from a diffusion, choose the interpolation from noise to data directly and regress a velocity onto
-        it. That one change is what makes generation straight, fast, and the technology that scales.</p>
+        it. That change straightens the sampling paths, cuts the number of solver steps, and is the formulation current large-scale generators use.</p>
       <div class="meta"><span>methods + applications</span><span>derivation session</span><span>coding lab</span><span>4
           problems</span></div>
       <nav class="actions" aria-label="Week navigation">
@@ -60,14 +46,14 @@
     <div class="wide page-layout">
       <article>
         <section id="orientation">
-          <h2><span class="num">1</span>Orientation</h2>
-          <p class="lede">One idea carries the week. A probability path is any interpolation between a base density and
+          <h2><span class="num">3.1</span>Orientation</h2>
+          <p class="lede">A probability path is any interpolation between a base density and
             the data; flow matching regresses a velocity field onto a path you pick, rather than one handed down by a
-            noising process. The whole machinery, and the reason it scales, follows from choosing the path well.</p>
+            noising process. Most of what follows, including why the method scales, comes down to choosing the path well.</p>
           <figure class="fig"><img src="../assets/figures/w3-overview.png"
               alt="Three panels: straight conditional interpolant lines connecting Gaussian noise points to a three-mode molecule-like target, the marginal velocity field those paths induce at an intermediate time, and few-step ODE sampling condensing noise onto the three modes in eight steps."
               loading="lazy" />
-            <figcaption>The three objects that carry the week. A <strong>conditional path</strong> joins each noise
+            <figcaption>The three objects used throughout the week. A <strong>conditional path</strong> joins each noise
               sample to a data sample by the straight interpolant \(x_t=(1-t)x_0+t x_1\) (left). Averaging the
               per-sample velocities gives the <strong>marginal velocity field</strong> \(u_t(x)=\mathbb E[\dot x_t\mid
               x_t=x]\) that a network learns by regression (center). Integrating it transports noise onto the data in a
@@ -93,7 +79,7 @@
             straighter paths, or to straighten them after the fact with <strong>rectified flow</strong> and reflow, is
             what buys few-step sampling. Straightness, path curvature, and the coupling between noise and data become the
             objects you tune.</p>
-          <p>The scientific payoff is that the path can live on the right space. Molecular and crystalline state spaces
+          <p>For scientific data, the useful consequence is that the path can live on the right space. Molecular and crystalline state spaces
             are rarely flat \(\mathbb R^d\): protein backbones are frames on \(SE(3)\), torsion and fractional
             coordinates live on tori, and a straight Euclidean line between two configurations can leave the manifold
             entirely. <strong>Riemannian flow matching</strong> replaces the straight line with a geodesic and the same
@@ -112,7 +98,7 @@
           </div>
         </section>
         <section id="goals">
-          <h2><span class="num">2</span>Learning goals</h2>
+          <h2><span class="num">3.2</span>Learning goals</h2>
           <ul>
             <li>Construct the marginal probability path and marginal velocity field from conditional ones, and prove the
               marginalization identity \(u_t(x)=\mathbb E[u_t(x\mid x_1)\mid x_t=x]\) that makes the marginal field
@@ -132,7 +118,7 @@
           </ul>
         </section>
         <section id="readings">
-          <h2><span class="num">3</span>Methods readings</h2>
+          <h2><span class="num">3.3</span>Methods readings</h2>
           <p>Read roughly in order. These trace flow matching from the identity that makes it trainable to the
             transformer generators that made it the scalable default. Start with the quick tour in the Flow Matching
             Guide for notation, then Lipman et al. for the marginalization construction and the CFM theorem, the two
@@ -156,7 +142,7 @@
                 spine the other readings hang on. Use §5 (guidance) only later, when you condition on a prompt.</p>
             </div>
             <div class="reading">
-              <span class="label">The foundation · 2022</span>
+              <span class="label">Flow matching · 2022</span>
               <div class="title"><a href="https://arxiv.org/abs/2210.02747" target="_blank" rel="noopener">Lipman et
                   al., Flow Matching for Generative Modeling</a></div>
               <p class="desc">The paper that names and organizes the method. Read §2 (CNF preliminaries), §3.1 with
@@ -177,7 +163,7 @@
                 where few-step generation is born.</p>
             </div>
             <div class="reading">
-              <span class="label">Couplings, a taste · 2023</span>
+              <span class="label">Couplings preview · 2023</span>
               <div class="title"><a href="https://arxiv.org/abs/2302.00482" target="_blank" rel="noopener">Tong et al.,
                   Improving and Generalizing Flow-Based Generative Models with Minibatch Optimal Transport</a></div>
               <p class="desc">Generalizes CFM to arbitrary source distributions and arbitrary couplings, then introduces
@@ -188,7 +174,7 @@
                 optimal transport their full treatment.</p>
             </div>
             <div class="reading">
-              <span class="label">The reference · 2024</span>
+              <span class="label">Reference guide · 2024</span>
               <div class="title"><a href="https://arxiv.org/abs/2412.06264" target="_blank" rel="noopener">Lipman et
                   al., Flow Matching Guide and Code</a></div>
               <p class="desc">The best single self-contained reference; use it as the canonical notation source. Read §2
@@ -199,7 +185,7 @@
                   library</a> mirrors the notation and is a clean starting point for Problems 3 and 4.</p>
             </div>
             <div class="reading">
-              <span class="label">It scales · 2024</span>
+              <span class="label">Large scale · 2024</span>
               <div class="title"><a href="https://arxiv.org/abs/2403.03206" target="_blank" rel="noopener">Esser et al.,
                   Scaling Rectified Flow Transformers for High-Resolution Image Synthesis (Stable Diffusion 3)</a></div>
               <p class="desc">The headline evidence that flow matching scales. Read §2 (simulation-free training of
@@ -255,7 +241,7 @@
           </div>
         </section>
         <section id="applications">
-          <h2><span class="num">4</span>Chemistry / materials application readings</h2>
+          <h2><span class="num">3.4</span>Chemistry / materials application readings</h2>
           <p>The scientific readings take flow matching off flat \(\mathbb R^d\) and onto the manifolds where molecules
             and crystals actually live. The lesson mirrors Week 2's: the <em>state space sets the model</em>, only now
             it sets the path. Start with Riemannian flow matching, which replaces the straight-line interpolant with a
@@ -281,7 +267,7 @@
           </div>
           <div class="reading-list">
             <div class="reading">
-              <span class="label">Theory backbone · 2023</span>
+              <span class="label">Theory · 2023</span>
               <div class="title"><a href="https://arxiv.org/abs/2302.03660" target="_blank" rel="noopener">Chen &amp;
                   Lipman, Flow Matching on General Geometries (Riemannian Flow Matching)</a></div>
               <p class="desc">Read this first; it is the manifold generalization the science papers instantiate. §3.1
@@ -325,7 +311,7 @@
                 up again in Week 10.</p>
             </div>
             <div class="reading">
-              <span class="label">Optional · diffusion contrast &amp; frontier</span>
+              <span class="label">Optional · diffusion contrast &amp; recent work</span>
               <div class="title"><a href="https://arxiv.org/abs/2302.02277" target="_blank" rel="noopener">Yim et al.,
                   FrameDiff (2023)</a>, <a href="https://arxiv.org/abs/2405.20313" target="_blank" rel="noopener">Huguet
                   et al., FoldFlow-2 (2024)</a>, and <a href="https://arxiv.org/abs/2412.11693" target="_blank"
@@ -334,12 +320,12 @@
                 lightly to see FoldFlow as the flow-matching swap on identical state space (mainly a Week 10 topic).
                 FoldFlow-2 scales FoldFlow with a sequence encoder and RL fine-tuning. CrystalFlow is a clean
                 conditional-flow-matching alternative to FlowMM over lattice, coordinates, and types (a Week 11 topic).
-                Read for where the frontier went after the core papers.</p>
+                Read for developments that followed the main papers.</p>
             </div>
           </div>
         </section>
         <section id="problems">
-          <h2><span class="num">5</span>Problems</h2>
+          <h2><span class="num">3.5</span>Problems</h2>
           <p>Four problems, each on its own page with full statements. Two derivations that build the machinery, the
             CFM identity and then straightness and reflow, followed by two coding labs: a toy flow trained under
             independent versus optimal-transport couplings, and a Riemannian flow on the torus of crystal fractional
@@ -375,7 +361,7 @@
           </ul>
         </section>
         <section id="next">
-          <h2><span class="num">6</span>Connection to the next module</h2>
+          <h2><span class="num">3.6</span>Connection to the next module</h2>
           <p>This week fixed the deterministic, Euclidean core: pick a path, regress a velocity, straighten if you can.
             But two choices were made silently. The interpolant was deterministic, a single line from \(x_0\) to
             \(x_1\), and the coupling was independent, each noise sample paired with a random data sample. Both are
@@ -411,6 +397,7 @@
     <div class="wrap">Built as a lightweight course site. Source pages are intentionally short and link out to papers,
       notes, and code.</div>
   </footer>
+<script src="../assets/nav.js" defer></script>
 </body>
 
 </html>

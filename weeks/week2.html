@@ -14,7 +14,8 @@
     window.MathJax = {
       tex: {
         inlineMath: [['\\(', '\\)'], ['$', '$']],
-        displayMath: [['\\[', '\\]']]
+        displayMath: [['\\[', '\\]']],
+    tags: 'all'
       },
       svg: { fontCache: 'global' }
     };
@@ -22,27 +23,12 @@
   <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 
-<body>
-  <nav class="topbar">
-    <div class="wide">
-      <a class="brand" href="../index.html">GenModel Bootcamp</a>
-      <nav class="navlinks" aria-label="Site">
-        <a href="../index.html">Overview</a>
-        <a href="../docs/syllabus.pdf">Syllabus</a>
-      </nav>
-      <nav class="weekstrip" aria-label="Weeks">
-        <span class="weekstrip-label">Week</span>
-        <a href="week1.html">1</a><a href="week2.html" class="active">2</a><a href="week3.html">3</a><a
-          href="week4.html">4</a><a href="week5.html">5</a><a href="week6.html">6</a><a href="week7.html">7</a><a
-          href="week8.html">8</a><a href="week9.html">9</a><a href="week10.html">10</a><a href="week11.html">11</a><a
-          href="week12.html">12</a>
-      </nav>
-    </div>
-  </nav>
+<body data-chapter="2">
+  <aside class="booknav" data-root=".." aria-label="Course contents"></aside>
 
   <header class="page">
     <div class="wrap">
-      <div class="kicker">Week 2 of 12 · foundations</div>
+      <div class="kicker">Week 2 of 12 · learning the dynamics</div>
       <h1 class="title">Diffusion, score models, and modern design space</h1>
       <p class="subtitle">Keep the differential-equation view from Week 1 and add one ingredient, noise. A forward
         process moves data toward a tractable Gaussian prior; the model learns the score and runs the process backward.
@@ -60,14 +46,14 @@
     <div class="wide page-layout">
       <article>
         <section id="orientation">
-          <h2><span class="num">1</span>Orientation</h2>
+          <h2><span class="num">2.1</span>Orientation</h2>
           <p class="lede">Forward noising processes, the score function, reverse-time SDEs, the probability-flow ODE,
             denoising score matching, and the EDM design space that makes all of it train. Then the same machinery on 3D
             molecules, where the score is an equivariant force field.</p>
           <figure class="fig"><img src="../assets/figures/w2-overview.png"
               alt="Three panels: a molecule-like data distribution dissolving into a Gaussian under added noise, the score field of an intermediate noised density pointing back toward the data modes, and reverse trajectories denoising noise back into the three modes."
               loading="lazy" />
-            <figcaption>The three objects that carry the week, on a molecule-like target. A fixed <strong>forward
+            <figcaption>The three objects used throughout the week, shown on a molecule-like target. A fixed <strong>forward
                 process</strong> blurs the data toward a Gaussian prior (left). At each noise level the model learns the
               <strong>score</strong> \(\nabla_x\log p_t(x)\), the gradient of the noised log-density (center). Combined
               with the known forward dynamics, that score gives either a reverse-time SDE or a deterministic
@@ -95,8 +81,7 @@
             posterior-mean denoising direction. At the population optimum this recovers the conditional mean of the
             noise given the noised sample, which is algebraically the marginal score; it does not recover the particular
             noise draw. (In DDPM this regression is motivated by a decomposition of the variational bound, with the
-            commonly used simplified loss changing its weighting.) This is the smoothing idea from Week 1 Problem 1, now
-            load-bearing.</p>
+            commonly used simplified loss changing its weighting.) This is the smoothing idea from Week 1 Problem 1, now central to the training objective.</p>
           <p>Why this matters for science is unusually direct here. If the data distribution is a Boltzmann distribution
             \(p \propto e^{-\beta_{\mathrm{phys}} U(x)}\) over full Cartesian molecular configurations, then the
             clean-data score is, up to inverse temperature \(\beta_{\mathrm{phys}}\), the physical <strong>force
@@ -119,7 +104,7 @@
           </div>
         </section>
         <section id="goals">
-          <h2><span class="num">2</span>Learning goals</h2>
+          <h2><span class="num">2.2</span>Learning goals</h2>
           <ul>
             <li>Write down a forward noising SDE and its perturbation kernel, and state how the score builds the
               reverse-time SDE and the probability-flow ODE that undo it.</li>
@@ -138,12 +123,12 @@
           </ul>
         </section>
         <section id="readings">
-          <h2><span class="num">3</span>Methods readings</h2>
-          <p>Read roughly in order, these trace one idea from its origins to the framework that makes it train at scale.
+          <h2><span class="num">2.3</span>Methods readings</h2>
+          <p>Read roughly in order, these papers follow diffusion from its origins to the formulation used at scale.
             Hyvärinen's score matching supplies the objective that sidesteps the unknown normalizing constant;
             Sohl-Dickstein frames generation as reversing a diffusion. DDPM turns that into a practical denoising
             regression and the model that started the modern wave, while NCSN arrives at the same place from score
-            matching and annealed Langevin. The score-SDE paper is the hinge: it places both in one common framework, as
+            matching and annealed Langevin. The score-SDE paper places both in one common framework, as
             the variance-preserving (VP) and variance-exploding (VE) SDEs, and hands you Anderson's reverse-time SDE and
             the probability-flow ODE. EDM then lays out the surrounding design choices directly, and DDIM isolates the
             deterministic-sampling idea. Aim to reproduce the reverse-time and probability-flow identities and to see
@@ -183,7 +168,7 @@
                 training) is enough to see DDPM's lineage.</p>
             </div>
             <div class="reading">
-              <span class="label">The workhorse · 2020</span>
+              <span class="label">DDPM · 2020</span>
               <div class="title"><a href="https://arxiv.org/abs/2006.11239" target="_blank" rel="noopener">Ho, Jain
                   &amp; Abbeel, Denoising Diffusion Probabilistic Models (DDPM)</a></div>
               <p class="desc">The paper that made diffusion work. A fixed Gaussian forward chain, a variational bound
@@ -205,7 +190,7 @@
                 ladder of noise levels fixes both estimation and exploration.</p>
             </div>
             <div class="reading">
-              <span class="label">The hinge · 2021</span>
+              <span class="label">Unifying SDE view · 2021</span>
               <div class="title"><a href="https://arxiv.org/abs/2011.13456" target="_blank" rel="noopener">Song et al.,
                   Score-Based Generative Modeling through Stochastic Differential Equations</a></div>
               <p class="desc">The unification. The continuous limits of DDPM and SMLD/NCSN become the VP and VE SDEs
@@ -272,7 +257,7 @@
           </div>
         </section>
         <section id="applications">
-          <h2><span class="num">4</span>Chemistry / materials application readings</h2>
+          <h2><span class="num">2.4</span>Chemistry / materials application readings</h2>
           <p>These take the clean theory onto real 3D structures, and the first lesson is that the <em>state space</em>
             sets the model. The molecular EDM, GeoDiff, TargetDiff, DiffCSP, CDVAE, and MatterGen differ mainly in which
             variables they diffuse and under which symmetries, not in the underlying Gaussian process. Start with the
@@ -358,7 +343,7 @@
           </div>
         </section>
         <section id="problems">
-          <h2><span class="num">5</span>Problems</h2>
+          <h2><span class="num">2.5</span>Problems</h2>
           <p>Four problems, each on its own page with full statements. Two derivations that build the machinery, then
             two coding labs that put it on real chemistry, a molecular free-energy surface and equivariant generation of
             3D structures.</p>
@@ -389,7 +374,7 @@
           </ul>
         </section>
         <section id="next">
-          <h2><span class="num">6</span>Connection to the next module</h2>
+          <h2><span class="num">2.6</span>Connection to the next module</h2>
           <p>This week leaves you with a slightly awkward object: a curved, stochastic path from noise to data, defined
             by a noising family prescribed in advance rather than learned as a transport path. The reverse-time SDE
             works, and the probability-flow ODE turns it into a deterministic flow, but that flow's trajectories still
@@ -426,6 +411,7 @@
     <div class="wrap">Built as a lightweight course site. Source pages are intentionally short and link out to papers,
       notes, and code.</div>
   </footer>
+<script src="../assets/nav.js" defer></script>
 </body>
 
 </html>
