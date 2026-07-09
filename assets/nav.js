@@ -45,7 +45,16 @@
         'Lab: Riemannian flow matching on the torus'
       ]
     },
-    4: { title: 'Stochastic interpolants' },
+    4: {
+      title: 'Stochastic interpolants',
+      notes: 'Stochastic interpolants',
+      problems: [
+        'The interpolant, its velocity, and transport',
+        'The score and the ODE-SDE sampler family',
+        'Lab: one interpolant, the whole sampler family',
+        'Lab: a data-dependent coupling on the torus'
+      ]
+    },
     5: { title: 'Couplings & optimal transport' },
     6: { title: 'One-step & few-step generation' },
     7: { title: 'Discrete & hybrid generation' },

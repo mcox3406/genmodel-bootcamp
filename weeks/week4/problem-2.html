@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 4 Problem 2 - Generative Modeling Bootcamp</title>
+  <meta name="description"
+    content="Derive the score of a stochastic interpolant from its latent noise term, the velocity-score dictionary, and the central result: a family of SDEs indexed by a diffusion schedule that all share one set of marginals, with the probability-flow ODE and the reverse diffusion SDE as special cases." />
+  <link rel="stylesheet" href="../../assets/style.css" />
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)'], ['$', '$']],
+        displayMath: [['\\[', '\\]']],
+    tags: 'all'
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head>
+
+<body>
+
+  <aside class="booknav" data-root="../.." aria-label="Course contents"></aside>
+
+  <header class="page">
+    <div class="wrap">
+      <div class="kicker">Week 4 · Problem 2 of 4</div>
+      <h1 class="title">The score and the ODE-SDE family that shares one set of marginals</h1>
+      <p class="subtitle">Derive the score from the latent term, prove the Fokker-Planck identity that lets one velocity
+        and one score generate a whole family of samplers, and place flow matching and diffusion as its endpoints.</p>
+      <nav class="actions" aria-label="Problem navigation"><a class="action" href="../week4.html">Week 4 overview</a><a
+          class="action" href="../../docs/syllabus.pdf">Syllabus</a></nav>
+    </div>
+  </header>
+  <main>
+
+    <div class="wide">
+      <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week4.html">Week 4</a> / Problem 2
+      </div>
+      <div class="problem-shell">
+        <article>
+          <div class="problem-meta"><span>derivation</span><span>Week 4</span><span>selected assignment</span></div>
+          <div class="prereq">
+            <div class="prereq-col">
+              <strong>Concepts you need</strong>
+              <ul>
+                <li>The interpolant and its velocity from Problem 1</li>
+                <li>The Fokker-Planck equation for an Ito SDE (Week 2)</li>
+                <li>The reverse-time SDE and probability-flow ODE (Week 2)</li>
+                <li>The velocity-score-denoiser dictionary for affine paths (Weeks 2-3)</li>
+                <li>Gaussian score \(\nabla_x\log\mathcal N(x;\mu,\sigma^2 I)=-(x-\mu)/\sigma^2\)</li>
+              </ul>
+            </div>
+            <div class="prereq-col">
+              <strong>If you get stuck</strong>
+              <ul>
+                <li><a href="https://arxiv.org/abs/2303.08797" target="_blank" rel="noopener">Stochastic Interpolants</a>,
+                  §2.2 (score objective), §2.3 (the SDE family), and §5.1 (diffusion recovery)</li>
+                <li><a href="https://arxiv.org/abs/2401.08740" target="_blank" rel="noopener">SiT</a>, §3.2 for the
+                  swept diffusion coefficient in practice</li>
+                <li>Week 2 <a href="../week2/problem-1.html">Problem 1</a> for the reverse-time SDE and the score</li>
+                <li>Week 3 <a href="../week3/problem-1.html">Problem 1</a>, part 6, for the affine velocity-score
+                  relation</li>
+              </ul>
+            </div>
+          </div>
+          <div class="source-note"><strong>Source note.</strong> Original problem assembling the score identity and the
+            sampler family of <a href="https://arxiv.org/abs/2303.08797" target="_blank" rel="noopener">Albergo, Boffi
+              &amp; Vanden-Eijnden (2023)</a>, §2.2-2.3 with the diffusion recovery in §5.1, framed to reuse the Week 2 Fokker-Planck and reverse-time-SDE
+            machinery and to make the recovery of both earlier weeks explicit. Builds directly on <a
+              href="problem-1.html">Problem 1</a>.</div>
+
+          <p>Problem 1 gave the velocity and its transport equation. This problem adds the second learned field, the
+            score, and then the result that makes the whole framework worth the name. Because the interpolant carries a
+            Gaussian latent, its score is an elementary conditional expectation, available on the very same path as the
+            velocity. And once you hold both fields, a one-line Fokker-Planck cancellation shows that an entire family
+            of stochastic differential equations, one for each choice of diffusion schedule \(\epsilon_t\), shares the
+            interpolant's marginals. The
+            deterministic flow of Week 3 and the noising diffusion of Week 2 are the two ends of that family; everything
+            between them is a sampler you may choose after training.</p>
+          <div class="note">
+            <p><strong>Convention and standing assumptions.</strong> As in Problem 1: base at \(t=0\), data at \(t=1\),
+              interpolant \(x_t=\alpha_t x_0+\beta_t x_1+\gamma_t z\), marginal law \(\rho_t\) (the law of \(x_t\)),
+              velocity \(b_t(x)=\mathbb E[\dot x_t\mid x_t{=}x]\). Write \(s_t(x)=\nabla_x\log\rho_t(x)\) for the score
+              and \(\{W_t\}\) for a standard Brownian motion.</p>
+            <p>Throughout, \(x_1\sim q\), \(x_0\sim\mathcal N(0,I_d)\), \(z\sim\mathcal N(0,I_d)\) with
+              \(z\perp(x_0,x_1)\), and, <em>unless explicitly stated otherwise</em>, \(x_0\perp x_1\). Parts 3 and 5 lean
+              on the Gaussian base and this independence; part 6 and Problem 4 are where it is dropped. Take
+              \(\alpha,\beta,\gamma\in C^1\big((0,1)\big)\), and assume enough decay and regularity of \(\rho_t,b_t,s_t\)
+              to differentiate under the integral sign, integrate by parts, and discard boundary terms. All statements
+              are for \(0&lt;t&lt;1\) with \(\gamma_t&gt;0\) unless noted; where a formula divides by \(\beta_t\), assume
+              additionally \(\beta_t\neq0\) on the interval in question (note \(\beta_0=0\), so such formulas are
+              singular as \(t\downarrow0\)). Times are drawn \(t\sim\mathcal U(0,1)\), or from any density positive on
+              \((0,1)\).</p>
+          </div>
+          <figure class="fig"><img src="../../assets/figures/w4p2.png"
+              alt="Left, the score field of a three-mode marginal at t=0.5 pointing toward high-density regions. Right, three sampling runs from the same base sample under increasing epsilon, one smooth ODE curve and two increasingly jittered SDE paths, all ending in the same mode region, with a small inset showing the Fokker-Planck cancellation of the added drift and diffusion terms."
+              loading="lazy" />
+            <figcaption>The two results. The score \(s_t=\nabla\log\rho_t\) (left) points toward high-density regions and
+              is available from the latent \(z\). Adding \(\epsilon_t s_t\,\mathrm dt+\sqrt{2\epsilon_t}\,\mathrm dW_t\)
+              to the probability-flow ODE (right) reinjects noise without moving the marginals, because the added drift
+              and diffusion cancel in the Fokker-Planck equation (inset). Sweeping \(\epsilon_t\) traces the family from
+              ODE to diffusion SDE.</figcaption>
+          </figure>
+          <ol class="parts">
+            <li><strong>The score from the latent.</strong> Condition on \((x_0,x_1)\): then
+              \(x_t\sim\mathcal N(\alpha_t x_0+\beta_t x_1,\gamma_t^2 I)\), whose score in \(x\) is
+              \(-(x-\alpha_t x_0-\beta_t x_1)/\gamma_t^2=-z/\gamma_t\). Using the mixture representation of \(\rho_t\)
+              from Problem 1 part 1 and Bayes' rule, prove the <strong>score identity</strong>
+              \[ s_t(x)=\nabla_x\log\rho_t(x)=-\frac{1}{\gamma_t}\,\mathbb E\big[z\mid x_t=x\big],\qquad 0&lt;t&lt;1. \]
+              (Route: write \(\nabla_x\rho_t(x)=\mathbb E_{(x_0,x_1)}\nabla_x\mathcal N(x;\alpha_t x_0+\beta_t
+              x_1,\gamma_t^2 I)\), turn the Gaussian gradient into \(-\!(x-\mu)/\gamma_t^2\) times the density, and
+              recognize the posterior average of \(-z/\gamma_t\).) Note this is exactly the obstruction Problem 1 part 5
+              flagged: the identity needs \(\gamma_t&gt;0\). Be careful about what is being averaged: the \(z\) inside
+              \(\mathbb E[z\mid x_t{=}x]\) is the <em>same</em> latent draw that generated \(x_t\), so the expectation is
+              over the posterior of \((x_0,x_1,z)\) given \(x_t=x\), not over a fresh independent Gaussian (whose mean
+              would simply be zero).</li>
+            <li><strong>The score objective.</strong> Define the tractable per-sample objective that regresses onto the
+              latent,
+              \[ \mathcal L_s(\theta)=\mathbb E_{t,\,x_0,\,x_1,\,z}\big\|\eta_\theta(x_t,t)-z\big\|^2,\qquad
+              t\sim\mathcal U(0,1), \]
+              and show its minimizer is \(\eta_t^\star(x)=\mathbb E[z\mid x_t{=}x]=-\gamma_t s_t(x)\) for
+              \(\mathrm dt\otimes\rho_t(\mathrm dx)\)-almost every \((t,x)\), so
+              \(s_\theta(x,t)=-\eta_\theta(x,t)/\gamma_t\) learns the score. Identify this as the interpolant's
+              noise-prediction objective and match it line for line to \(\epsilon\)-prediction in Week 2 Problem 1: same
+              regression, same conditional-mean minimizer, latent \(z\) in place of the diffusion noise.</li>
+            <li><strong>The velocity-score dictionary.</strong> On the affine path, \(x=\alpha_t\mathbb E[x_0\mid
+              x_t{=}x]+\beta_t\mathbb E[x_1\mid x_t{=}x]+\gamma_t\mathbb E[z\mid x_t{=}x]\) ties the three conditional
+              expectations together. First convince yourself that this identity, the velocity of Problem 1 part 2, and
+              the score identity of part 1 are <em>not enough</em>: they leave \(\mathbb E[x_0\mid x_t]\) as a free
+              third function, so a single field determines nothing. Then supply the missing fact. Because the base
+              \(x_0\) and the latent \(z\) are <em>both</em> standard Gaussian and independent of \(x_1\), conditioning
+              on \((x_1,x_t)\) is conditioning on the single observation \(w=\alpha_tx_0+\gamma_tz\), and Gaussian
+              regression plus the tower property give
+              \[ \mathbb E[x_0\mid x_t{=}x]=\frac{\alpha_t}{\gamma_t}\,\mathbb E[z\mid x_t{=}x]=-\alpha_t\,s_t(x). \]
+              Equivalently: \(\alpha_tx_0+\gamma_tz\sim\mathcal N(0,\sigma_t^2 I)\) independent of \(x_1\) with
+              \(\sigma_t^2=\alpha_t^2+\gamma_t^2\), so \(\rho_t\) is exactly the marginal of the <em>one-sided</em>
+              Gaussian path \(x_t\overset{d}{=}\beta_tx_1+\sigma_t\xi\). (The middle expression needs \(\gamma_t&gt;0\),
+              but the conclusion \(\mathbb E[x_0\mid x_t{=}x]=-\alpha_t s_t(x)\) is the statement
+              \(\mathbb E[x_0\mid x_t]=(\alpha_t/\sigma_t^2)\,\mathbb E[w\mid x_t]\) for \(w=\alpha_tx_0+\gamma_tz\), and
+              so survives the deterministic limit \(\gamma_t\to0\) as long as \(\sigma_t&gt;0\), which is Problem 1's
+              sharp condition. The dictionary below therefore has a valid \(\gamma_t\equiv0\) reading, in which the
+              Gaussian base alone supplies the smoothing.) Now the count works. Show that, given the coefficients and
+              assuming \(\beta_t\neq0\), any one of
+              \(\{b_t,\,s_t,\,\mathbb E[x_1\mid x_t]\}\) determines the other two, and derive
+              \[ b_t(x)=\frac{\dot\beta_t}{\beta_t}\,x+\Big[\frac{\dot\beta_t}{\beta_t}\,\sigma_t^2-\sigma_t\dot\sigma_t\Big]\,s_t(x),
+              \qquad \sigma_t\dot\sigma_t=\alpha_t\dot\alpha_t+\gamma_t\dot\gamma_t, \]
+              noting that \(\beta_t\neq0\) is what makes \(\mathbb E[x_1\mid x_t{=}x]=(x+\sigma_t^2s_t(x))/\beta_t\)
+              meaningful, so the displayed formula is singular as \(t\downarrow0\) where \(\beta_0=0\). Note also that
+              recovering \(s_t\) <em>from</em> \(b_t\) needs the bracket to be nonzero; verify it is, for
+              \(\gamma_t\equiv0,\alpha_t=1-t,\beta_t=t\), where it equals \((1-t)/t\), and check that this case
+              recovers Week 3 Problem 1 part 6. Conclude that
+              "learn a velocity" (flow matching) and "learn a score" (diffusion) are two coordinates on one object, with
+              the latent \(z\)-prediction as a third equivalent target. <strong>Finally, state where this breaks.</strong>
+              The boxed step used both the Gaussianity of the base and \(x_0\perp x_1\). For a dependent coupling
+              (Problem 1 part 6, Problem 4), \(b_t\) and \(s_t\) are genuinely independent fields, which is exactly why
+              the framework trains two heads rather than deriving one from the other.</li>
+            <li><strong>The family of samplers (the key result).</strong> Suppose you hold the exact \(b_t\) and
+              \(s_t\). Prove that for <em>any</em> non-negative, locally integrable schedule \(\epsilon_t\), and under
+              the standard existence-uniqueness and endpoint-integrability assumptions that make the SDE well-posed, the
+              forward-time SDE
+              \[ \mathrm dX_t=\big[b_t(X_t)+\epsilon_t\,s_t(X_t)\big]\,\mathrm dt+\sqrt{2\epsilon_t}\,\mathrm dW_t,\qquad
+              X_0\sim\rho_0, \]
+              has time-marginals equal to \(\rho_t\). Give the one-line Fokker-Planck argument: the density of this SDE
+              evolves by \(\partial_t\rho=-\nabla\!\cdot(\rho[b_t+\epsilon_t s_t])+\epsilon_t\Delta\rho\); substitute
+              \(\rho=\rho_t\) and \(\rho_t s_t=\nabla\rho_t\) to see the added terms \(-\nabla\!\cdot(\epsilon_t\rho_t
+              s_t)+\epsilon_t\Delta\rho_t\) cancel identically, leaving Problem 1's transport equation
+              \(\partial_t\rho_t=-\nabla\!\cdot(\rho_t b_t)\). So the family all transports \(\rho_0\) onto \(q\), and
+              \(\epsilon_t=0\) is the probability-flow ODE. Name the cancellation: \(\epsilon_t s_t\,\mathrm dt+\sqrt{2\epsilon_t}\,\mathrm dW_t\)
+              is an overdamped Langevin move whose instantaneous invariant measure is \(\rho_t\) itself, and adding a
+              dynamics that <em>preserves</em> \(\rho_t\) to one that <em>transports</em> \(\rho_0\mapsto\rho_t\) still
+              transports \(\rho_0\mapsto\rho_t\). State plainly what changes and what does not: the marginals
+              are identical across the family, the joint law of the trajectory is not, and only \(\epsilon_t=0\) gives a
+              deterministic invertible map (hence likelihoods and latent editing). Flag one practical caveat the
+              statement hides: \(s_t=-\eta_t^\star/\gamma_t\) blows up like \(1/\gamma_t\) at the endpoints, so the
+              freedom in \(\epsilon_t\) is real for the exact-field PDE argument but requires \(\epsilon_t\) to
+              decay with \(\gamma_t\) for the drift to be integrable near \(t=1\). This is why the clean statement is
+              about the Fokker-Planck cancellation, which is pointwise in \(t\), rather than about the SDE having a
+              solution, which is not. Problem 3 hits this immediately.</li>
+            <li><strong>Diffusion and flow matching as endpoints.</strong> Two reductions.
+              <ul>
+                <li><em>Flow matching</em>: the deterministic interpolant \(\gamma_t=0,\alpha_t=1-t,\beta_t=t\) sampled
+                  at \(\epsilon_t=0\) is the Week 3 velocity ODE. State it in one line.</li>
+                <li><em>Diffusion</em>: take the <strong>one-sided</strong> interpolant \(x_t=\beta_t x_1+\gamma_t z\)
+                  (drop the explicit base term and let the latent supply the noise). Note first that this changes the
+                  boundary conditions of Problem 1: with \(\alpha_t\equiv0\) the base can only come from the latent, so
+                  the <em>ideal</em> one-sided bridge asks for \(\gamma_0=1\) (not \(0\)) and \(\beta_0=0\), while
+                  \(\beta_1=1,\gamma_1=0\) as before. Match
+                  \(\beta_t\) and \(\gamma_t\) to a Gaussian forward schedule
+                  \(x_\tau=a_\tau x_1+\sqrt{1-a_\tau^2}\,\epsilon\) under \(\tau=1-t\), with
+                  \(a_\tau=\exp(-\tfrac12\int_0^\tau\lambda_u\,\mathrm du)\).
+                  <em>(Write the VP noise schedule \(\lambda_\tau\), not \(\beta_\tau\) as in Week 2: here \(\beta_t\)
+                  is already the interpolant's data coefficient, and the two are different objects.)</em>
+                  Now confront the boundary conditions honestly, because a finite-time VP diffusion does <em>not</em>
+                  satisfy the ideal ones, it only approximates them: this schedule gives \(\beta_0=a_1&gt;0\) and
+                  \(\gamma_0=\sqrt{1-a_1^2}&lt;1\), reaching \(\beta_0=0,\gamma_0=1\) only in the limit
+                  \(\int_0^1\lambda\to\infty\). The residual \(a_1&gt;0\) is precisely the
+                  prior-mismatch error of real diffusion models: you start sampling from \(\mathcal N(0,I)\) at a time
+                  when the true \(\rho_0\) still retains an \(a_1\)-sized memory of the data. It is the one boundary
+                  condition the <em>two-sided</em> interpolant satisfies exactly, by construction. Then show that
+                  \(\epsilon_t=\tfrac12\lambda_{1-t}\) reproduces the reverse-time
+                  diffusion SDE of Week 2, while \(\epsilon_t=0\) gives its probability-flow ODE. (You should find
+                  \(b_t(x)=\tfrac12\lambda_{1-t}\,(x+s_t(x))\); the part-3 bracket collapses because
+                  \(\beta_t^2+\gamma_t^2=1\).)
+                </li>
+              </ul>
+              Conclude the sentence the week is built on: diffusion and flow matching are the score-only-SDE and
+              velocity-only-ODE corners of one interpolant family, connected by the choice of diffusion schedule
+              \(\epsilon_t\).</li>
+            <li><strong>Why \(\epsilon_t\) is not free in practice.</strong> Parts 4-5 assume the <em>exact</em> fields.
+              Argue that with a <em>learned</em> \(b_\theta,s_\theta\) the family no longer shares marginals exactly:
+              write \(b_\theta=b_t+e^b_t\), \(s_\theta=s_t+e^s_t\) for small errors, and show heuristically that the
+              stochastic term contributes a score-driven relaxation that <em>contracts</em> some field error (a
+              Langevin-like error-correcting effect, so \(\epsilon_t>0\) can beat the ODE), while also injecting fresh
+              noise and requiring more steps to integrate accurately (so too much \(\epsilon_t\) hurts). Make it
+              quantitative (heuristically: the bound below assumes smooth densities, integration by parts with vanishing
+              boundary terms, a shared diffusion coefficient, and a log-Sobolev inequality for \(\rho_t\)). Differentiate
+              \(\mathcal K_t=\mathrm{KL}(\hat\rho_t\|\rho_t)\) along the two Fokker-Planck
+              flows: the exact-field terms cancel by part 4 and what survives is a contraction
+              \(-\epsilon_t\mathcal I_t\) (relative Fisher information) plus an error-injection term; with Young's
+              inequality and a log-Sobolev constant \(\varkappa_t\), <em>for \(\epsilon_t&gt;0\)</em>,
+              \[ \frac{\mathrm d\mathcal K_t}{\mathrm dt}\le-\varkappa_t\epsilon_t\,\mathcal K_t
+              +\frac{1}{2\epsilon_t}\,\mathbb E\big\|e^b_t+\epsilon_te^s_t\big\|^2 . \]
+              The restriction \(\epsilon_t&gt;0\) is not cosmetic: the \(1/(2\epsilon_t)\) prefactor is the price of
+              Young's inequality, and it blows up exactly as the sampler becomes deterministic. The ODE endpoint
+              \(\epsilon_t=0\) has no contraction term at all and needs a separate argument (there the transported error
+              is governed by the stability of the flow map, not by a relaxation rate), so do not read the bound as
+              saying \(\epsilon_t=0\) is infinitely bad.
+              Read off the asymmetry the informal statement hides: the noise contracts the <em>velocity</em> error
+              \(e^b\) at rate \(\varkappa\epsilon\), but the large-\(\epsilon\) floor \(\mathbb E\|e^s\|^2/2\varkappa\) is set
+              by the <em>score</em> error alone, because a very noisy sampler is just a Langevin chain for the learned
+              potential. Conclude with a sharper prediction than "noise fixes errors": stochasticity repairs a field
+              whose two heads are mutually <em>inconsistent</em>; it cannot repair a field that is
+              <em>consistently wrong</em> (the exact fields of a wrong target), which it will instead sample
+              faithfully. State the resulting bias-variance-cost tradeoff, and note that Problem 3 measures exactly this
+              curve on a molecular target, including the case where \(\epsilon^\star=0\), and SiT reports it at scale.</li>
+          </ol>
+          <div class="why"><strong>Why this matters.</strong> The family of samplers is the technical content behind
+            "stochastic interpolants unify flows and diffusions." It says the deterministic sampler of Week 3 and the
+            noising sampler of Week 2 are not different models but different readings of one trained pair of fields, and
+            it hands you a knob, \(\epsilon_t\), to trade determinism for error-correcting stochasticity after training.
+            For rugged molecular and materials targets that knob is the difference between a deterministic pushforward
+            of the base and a sampler that can mix between basins during inference, which is exactly what Problem 3 puts
+            to the test.</div>
+
+          <div class="pager"><a href="problem-1.html">← Problem 1: The stochastic interpolant, its velocity, and the
+              transport equation</a><a href="problem-3.html">Problem 3: One interpolant, the whole sampler family, on a
+              molecular free-energy surface →</a></div>
+        </article>
+        <aside class="problem-nav" aria-label="Week 4 problem navigation">
+          <a href="notes.html">Lecture notes</a>
+          <strong>Week 4 problems</strong>
+          <a href="problem-1.html">Problem 1: The stochastic interpolant, its velocity, and the transport equation</a><a
+            class="current" href="problem-2.html">Problem 2: The score and the ODE-SDE family that shares one set of
+            marginals</a><a href="problem-3.html">Problem 3: Coding lab: one interpolant, the whole sampler family, on a
+            molecular free-energy surface</a><a href="problem-4.html">Problem 4: Coding lab: a data-dependent coupling
+            for structure relaxation on the torus</a>
+        </aside>
+      </div>
+    </div>
+
+  </main>
+  <footer>
+    <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes
+      remain the primary source material.</div>
+  </footer>
+<script src="../../assets/nav.js" defer></script>
+</body>
+
+</html>

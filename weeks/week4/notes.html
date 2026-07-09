@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 4 notes on stochastic interpolants</title>
+  <meta name="description"
+    content="Lecture notes for Week 4: the stochastic interpolant with a latent noise term, its marginal and velocity, the transport equation, the score identity, the two simulation-free objectives, the family of samplers indexed by a diffusion schedule sharing one set of marginals, recovering flow matching and diffusion, data-dependent couplings and bridges, and stochastic-interpolant generators for crystals and molecules." />
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="../../assets/style.css" />
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(', '\\)'], ['$', '$']], displayMath: [['\\[', '\\]']],
+    tags: 'all' },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+
+<body data-chapter="4">
+  <aside class="booknav" data-root="../.." aria-label="Course contents"></aside>
+
+  <header class="page">
+    <div class="wrap">
+      <div class="kicker">Week 4 · lecture notes</div>
+      <h1 class="title">Stochastic interpolants</h1>
+      <p class="subtitle">A compact tour of the Week 4 readings, from the interpolant with its latent noise term and its
+        velocity and score, through the family of samplers that shares one set of marginals, to data-dependent couplings
+        and stochastic-interpolant generators for crystals and molecules.</p>
+      <nav class="actions" aria-label="Notes navigation">
+        <a class="action" href="../week4.html">Week 4 overview</a>
+        <a class="action primary" href="problem-1.html">Problems</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <div class="wide page-layout">
+      <article>
+        <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week4.html">Week 4</a> / Notes</div>
+
+        <div class="note">
+          <p>These notes condense the Week 4 readings into the ideas you need, organized by concept rather than by
+            paper. Notation continues from Weeks 2-3, with noise at \(t=0\) and data at \(t=1\). The through-line: write
+            one path with a latent noise term, learn a velocity and a score on it by conditional expectation, and read
+            the deterministic flow, the noising diffusion, and every sampler between them off the single pair of fields.</p>
+        </div>
+
+        <section id="one-construction">
+          <h2><span class="num">4.1</span>From two constructions to one</h2>
+          <p>Two of the past weeks learned closely related objects. Week 2 fixed a Gaussian noising process, a family
+            \(p_t\) built by corruption, and learned the <strong>score</strong> \(\nabla\log p_t\). Week 3 chose a
+            deterministic path directly and learned a <strong>velocity</strong>. Both are conditional-mean regressions
+            on a chosen family of densities, and for an affine Gaussian path the two learned objects are linear
+            reparameterizations of each other. The <strong>stochastic interpolant</strong> makes the shared structure
+            the primitive: it writes down a path with its own latent randomness, learns the velocity and the score
+            together, and then recovers diffusion and flow matching as corners of one design space, with a continuous
+            family of samplers connecting them.</p>
+          <div class="source-note"><strong>From the readings.</strong> Albergo, Boffi &amp; Vanden-Eijnden (Stochastic
+            Interpolants) §§1-2, with the ODE/SDE pairing in §2.3; the same pairing in MIT 6.S184 notes §§2 and 4. The
+            framing continues the Week 3 note "flow matching, rectified flow, and stochastic interpolants." Full
+            citations for every shorthand used below are in <a href="#references">§4.11</a>.</div>
+        </section>
+
+        <section id="interpolant">
+          <h2><span class="num">4.2</span>The stochastic interpolant</h2>
+          <p>Fix a base \(\rho_0=\mathcal N(0,I)\) you can sample and data \(\rho_1=q\). In general, Albergo, Boffi and
+            Vanden-Eijnden define a <strong>stochastic interpolant</strong> as \(x_t=I_t(x_0,x_1)+\gamma_t z\), where
+            \(I_t\) is any interpolating map with \(I_0(x_0,x_1)=x_0\) and \(I_1(x_0,x_1)=x_1\). Throughout these notes
+            we work in the <em>spatially linear</em> (affine) case, where \(I_t\) is a linear combination of the
+            endpoints and the path becomes</p>
+          <div class="eqblock">\[ x_t=\alpha_t x_0+\beta_t x_1+\gamma_t z,\qquad x_0\sim\rho_0,\;x_1\sim\rho_1,\;z\sim
+            \mathcal N(0,I)\text{ independent}, \]</div>
+          <p>with coefficients satisfying \(\alpha_0=1,\beta_0=0\) and \(\alpha_1=0,\beta_1=1\). For the genuinely
+            stochastic construction take a latent width with \(\gamma_t&gt;0\) on \(0&lt;t&lt;1\) and \(\gamma_0=\gamma_1=0\);
+            the deterministic case \(\gamma_t\equiv0\) is a separate degenerate corner, recovered below, on which the
+            score identity of §4.4 is unavailable. The endpoints are therefore exactly \(x_0\) and \(x_1\): the
+            path starts at a base sample and ends at a data sample. The new ingredient relative to Week 3 is the
+            <strong>latent term</strong> \(\gamma_t z\), an independent Gaussian that inflates the path in the middle and
+            deflates to nothing at both ends. Its role is to give the marginal law a nondegenerate density with a
+            well-defined score at every interior time, even when the data \(q\) is singular (a point cloud, a manifold),
+            so both a velocity and a score are learnable on the same path. Setting \(\gamma_t\equiv0\) with
+            \(\alpha_t=1-t,\beta_t=t\) is exactly the deterministic straight-line flow matching of Week 3.</p>
+          <figure class="fig"><img src="../../assets/figures/w4n-interpolant.png"
+              alt="A base Gaussian at t=0 on the left and a three-mode data density at t=1 on the right, joined by several interpolant paths; a shaded band around each path shows the latent noise width, zero at both ends and widest at t=0.5."
+              loading="lazy" />
+            <figcaption>The stochastic interpolant. Straight interpolant segments join base samples \(x_0\) to data
+              samples \(x_1\); the shaded band is the latent width \(\gamma_t\), pinned to zero at both ends and, for the
+              symmetric schedule drawn here (\(\gamma_t\propto\sqrt{t(1-t)}\)), widest at \(t=\tfrac12\). A general
+              \(\gamma_t\) need not peak at the midpoint. The marginal \(\rho_t\) (density strip) interpolates the base
+              and the data and has a smooth score at every interior \(t\).</figcaption>
+          </figure>
+          <div class="source-note"><strong>From the readings.</strong> Stochastic Interpolants §2.1 (general definition
+            and marginal) and §4, especially §4.1, for the spatially linear specialization used here; Albergo &amp;
+            Vanden-Eijnden (Building Normalizing Flows) §2 for the deterministic skeleton.
+            Constructed in <a href="problem-1.html">Problem 1</a>.</div>
+        </section>
+
+        <section id="velocity">
+          <h2><span class="num">4.3</span>The velocity field and its transport equation</h2>
+          <p>Let \(\rho_t\) be the law of \(x_t\). The time derivative along the path is
+            \(\dot x_t=\dot\alpha_t x_0+\dot\beta_t x_1+\dot\gamma_t z\), a random vector; its conditional expectation
+            given the current state is the <strong>velocity field</strong></p>
+          <div class="eqblock">\[ b_t(x)=\mathbb E\big[\dot x_t\mid x_t=x\big]
+            =\dot\alpha_t\,\mathbb E[x_0\mid x_t{=}x]+\dot\beta_t\,\mathbb E[x_1\mid x_t{=}x]+\dot\gamma_t\,\mathbb
+            E[z\mid x_t{=}x]. \]</div>
+          <p>Exactly as in Week 3's marginalization trick, this field generates the marginal law through the continuity
+            equation \(\partial_t\rho_t+\nabla\!\cdot(\rho_t b_t)=0\), so the probability-flow ODE \(\dot X_t=b_t(X_t)\)
+            with \(X_0\sim\rho_0\) transports the base density onto the data. And exactly as in Week 3, the field is the
+            minimizer of a tractable per-sample regression: draw \((x_0,x_1,z)\), form \(x_t\), and regress a network
+            onto the random velocity \(\dot x_t\),</p>
+          <div class="eqblock">\[ \mathcal L_b(\theta)=\mathbb E\big\|b_\theta(x_t,t)-\dot x_t\big\|^2,\qquad
+            b_\theta^\star=b_t. \]</div>
+          <p>The minimizer is the conditional mean of \(\dot x_t\), which is \(b_t\) by definition. No ODE solve, no
+            divergence, no likelihood, the same simulation-free move as denoising score matching and conditional flow
+            matching, now regressing on the interpolant's own velocity.</p>
+          <div class="source-note"><strong>From the readings.</strong> Stochastic Interpolants §2.2 (velocity, transport
+            equation, quadratic objective). Same conditional-mean argument as Week 2 Problem 1 and Week 3 Problem 1.
+            Derived in <a href="problem-1.html">Problem 1</a>.</div>
+        </section>
+
+        <section id="score">
+          <h2><span class="num">4.4</span>The score, and the velocity-score dictionary</h2>
+          <p>The latent term makes the score elementary. Condition on \((x_0,x_1)\): then \(x_t\) is Gaussian,
+            \(\mathcal N(\alpha_t x_0+\beta_t x_1,\gamma_t^2 I)\), so its score in \(x\) is
+            \(-(x-\alpha_t x_0-\beta_t x_1)/\gamma_t^2=-z/\gamma_t\). Averaging over the posterior (the same tower
+            property used for the velocity) gives the marginal <strong>score</strong></p>
+          <div class="eqblock">\[ s_t(x)=\nabla_x\log\rho_t(x)=-\frac{1}{\gamma_t}\,\mathbb E\big[z\mid
+            x_t=x\big],\qquad 0&lt;t&lt;1, \]</div>
+          <p>learnable by the tractable objective \(\mathcal L_s(\theta)=\mathbb E\|\eta_\theta(x_t,t)-z\|^2\) whose
+            minimizer is \(\eta_t(x)=\mathbb E[z\mid x_t{=}x]=-\gamma_t s_t(x)\), the interpolant's noise-prediction
+            objective, structurally identical to \(\epsilon\)-prediction in Week 2. Both \(b_t\) and \(s_t\) are built
+            from the same three posterior conditional expectations \(\mathbb E[x_0\mid\cdot]\), \(\mathbb E[x_1\mid
+            \cdot]\), \(\mathbb E[z\mid\cdot]\), and those three obey one linear identity, namely
+            \(x=\alpha_t\mathbb E[x_0\mid\cdot]+\beta_t\mathbb E[x_1\mid\cdot]+\gamma_t\mathbb E[z\mid\cdot]\). Count
+            carefully: that identity alone is one equation for three unknowns, so it does <em>not</em> by itself let one
+            field be read off another. What closes the count is an extra distributional fact, and it is worth seeing
+            exactly which assumption supplies it.</p>
+          <p>In the standard setting of these notes, a Gaussian base \(x_0\sim\mathcal N(0,I)\) drawn
+            <em>independently</em> of \(x_1\), the two Gaussians combine: \(\alpha_t x_0+\gamma_t z\sim\mathcal
+            N(0,\sigma_t^2I)\) with \(\sigma_t^2=\alpha_t^2+\gamma_t^2\), independent of \(x_1\). So the path is
+            distributionally one-sided, \(x_t\overset{d}{=}\beta_t x_1+\sigma_t\xi\), and \(\mathbb E[x_0\mid x_t{=}x]
+            =-\alpha_t s_t(x)\) is a second linear relation. With it the system closes: given the coefficients (and
+            \(\beta_t\neq0\)), any one of the velocity, the score, the noise prediction, or the denoiser determines the
+            rest. That is the familiar Week 2 dictionary, and it holds here on the two-sided path too.</p>
+          <p>The dividing line is therefore not two-sided versus one-sided, but whether that extra fact survives. Break
+            either hypothesis, by coupling \(x_0\) to \(x_1\) (Problem 4, and Week 5) or by using a non-Gaussian base,
+            and \(\alpha_t x_0+\gamma_t z\) is no longer a lone Gaussian independent of \(x_1\). The second relation is
+            gone, \(\mathbb E[x_0\mid x_t]\) is a genuinely free third function, and \(b_t\) and \(s_t\) become
+            independent objects. <em>That</em> is why the framework trains a velocity <em>and</em> a score rather than
+            deriving one from the other: not because the standard path demands it, but because the general one does.</p>
+          <div class="source-note"><strong>From the readings.</strong> Stochastic Interpolants §2.2 (score objective and
+            the velocity-score relation), with the spatially linear factorization in §4.1; Flow Matching Guide §4.8.1,
+            "Velocity parameterizations," for the affine-path conversion formulas. Derived in <a
+              href="problem-2.html">Problem 2</a>.</div>
+        </section>
+
+        <section id="family">
+          <h2><span class="num">4.5</span>One set of marginals, a family of samplers</h2>
+          <p>Here is the payoff, and the result that names the week. Suppose you hold the exact velocity \(b_t\) and
+            score \(s_t\) for the marginals \(\rho_t\). Then for <em>any</em> non-negative diffusion schedule
+            \(\epsilon_t\), the stochastic differential equation</p>
+          <div class="eqblock">\[ \mathrm dX_t=\big[b_t(X_t)+\epsilon_t\,s_t(X_t)\big]\,\mathrm dt
+            +\sqrt{2\epsilon_t}\,\mathrm dW_t,\qquad X_0\sim\rho_0, \]</div>
+          <p>has time-marginals equal to \(\rho_t\), so it too transports the base density onto the data. The proof is
+            one line of Fokker-Planck. The extra drift \(\epsilon_t s_t=\epsilon_t\nabla\log\rho_t\) and the diffusion
+            \(\epsilon_t\Delta\) contribute \(-\nabla\!\cdot(\epsilon_t\rho_t s_t)+\epsilon_t\Delta\rho_t\) to
+            \(\partial_t\rho_t\), and since \(\rho_t s_t=\nabla\rho_t\) these two terms cancel exactly, leaving the
+            probability-flow equation \(\partial_t\rho_t=-\nabla\!\cdot(\rho_t b_t)\) unchanged. The added score-drift
+            and noise form a Langevin move that holds \(\rho_t\) stationary at each instant, so the marginals are
+            untouched while the trajectories are not.</p>
+          <p>The consequences are the whole point. At \(\epsilon_t=0\) the SDE is the <strong>probability-flow ODE</strong>,
+            the deterministic flow-matching sampler of Week 3. Increasing \(\epsilon_t\) makes the sampler progressively
+            noisier and more error-correcting, and one specific schedule reproduces the reverse-time diffusion SDE of
+            Week 2. A single trained interpolant thus yields a whole family of samplers indexed by the schedule
+            \(\epsilon_t\), chosen <em>after</em> training, from deterministic transport to full stochastic denoising.</p>
+          <p>Read the theorem for what it says. The marginals coincide <em>exactly</em> only for the exact fields
+            \(b_t,s_t\). With a learned, imperfect pair the different \(\epsilon_t\) no longer agree, and the theorem
+            stops being an equivalence and becomes a license: it tells you the whole family is legitimate, so
+            \(\epsilon_t\) is a free sampler-tuning knob rather than a modelling commitment. Which value is best is then
+            an empirical question about your trained field and your target.</p>
+          <figure class="fig"><img src="../../assets/figures/w4n-family.png"
+              alt="Three columns showing sampling trajectories from the same base points under increasing diffusion coefficient: at epsilon=0 smooth deterministic curves, at moderate epsilon jittered paths, at large epsilon strongly stochastic paths, all three converging to the same three-mode target density shown as identical histograms beneath."
+              loading="lazy" />
+            <figcaption>One interpolant, three samplers. From identical base points, the ODE (\(\epsilon_t=0\), left)
+              gives smooth deterministic trajectories, a moderate \(\epsilon_t\) (center) jitters them, and a large
+              \(\epsilon_t\) (right) is strongly stochastic. In the exact-field limit the terminal histograms coincide:
+              same marginals, different paths. With a learned field they diverge, which is why \(\epsilon_t\) is a knob
+              worth tuning.</figcaption>
+          </figure>
+          <div class="source-note"><strong>From the readings.</strong> Stochastic Interpolants §2.3 (generative models:
+            the probability-flow ODE and the forward and backward SDEs sharing marginals), with the impact of the latent
+            variable and the diffusion coefficient in §4.3; SiT §2.4 ("Specifying the diffusion coefficient," which can
+            be chosen after learning) and §3.2 for the swept coefficient at scale.
+            Proved in <a href="problem-2.html">Problem 2</a>, measured in <a href="problem-3.html">Problem 3</a>.</div>
+        </section>
+
+        <section id="recover">
+          <h2><span class="num">4.6</span>Recovering flow matching and diffusion</h2>
+          <p>The two earlier weeks are corners of this construction. <strong>Flow matching</strong> (Week 3) is the
+            deterministic interpolant \(\gamma_t\equiv0\) with \(\alpha_t=1-t,\beta_t=t\), sampled at \(\epsilon_t=0\):
+            no latent term, velocity only, ODE sampler. <strong>Diffusion</strong> (Week 2) is the
+            <em>one-sided</em> interpolant for a Gaussian base: drop the explicit base term and let the latent carry it,
+            \(x_t=\beta_t x_1+\gamma_t z\), which is exactly the forward noising process
+            \(x_t=\alpha^{\mathrm{diff}}_t x_1+\sigma_t\epsilon\) after matching \(\beta_t\leftrightarrow
+            \alpha^{\mathrm{diff}}_t\) and \(\gamma_t\leftrightarrow\sigma_t\); learning the score and sampling at the
+            \(\epsilon_t\) tied to that schedule reproduces the reverse-time SDE, while \(\epsilon_t=0\) gives its
+            probability-flow ODE. The interpolant coefficients pick the <em>path</em>, the choice of learned target
+            picks the <em>parameterization</em>, and \(\epsilon_t\) picks the <em>sampler</em>; Weeks 2 and 3 each froze
+            two of the three.</p>
+          <div class="note">
+            <p><strong>A change of endpoint convention.</strong> The one-sided form does not obey the
+              \(\gamma_0=\gamma_1=0\) convention of §4.2, and it would be a mistake to read it as a member of that same
+              family. There the latent vanishes at both ends and the base sample \(x_0\) supplies the \(t=0\) endpoint;
+              here the Gaussian variable <em>is</em> the base, so \(\gamma_0\neq0\) (\(\beta_0=0,\ \gamma_0=1\) for a
+              variance-preserving schedule) and it is \(\gamma_1=0\) alone that pins the data endpoint. Two-sided
+              interpolants bridge two arbitrary densities with a latent bulge in between; one-sided interpolants are the
+              degenerate case in which the noise <em>is</em> one of the two densities. This is why diffusion needs only
+              a score and never a separate base term.</p>
+          </div>
+          <figure class="fig"><img src="../../assets/figures/w4n-recover.png"
+              alt="A design-space map with three axes: latent width gamma (deterministic to stochastic path), learned target (velocity, score, or both), and diffusion coefficient epsilon (ODE to SDE); flow matching, diffusion, and the full stochastic interpolant marked as three points."
+              loading="lazy" />
+            <figcaption>The design space. Three independent choices, the latent width \(\gamma_t\), the learned target,
+              and the sampler coefficient \(\epsilon_t\), place flow matching (deterministic path, velocity, ODE) and
+              diffusion (one-sided path, score, matched SDE) as corners, with the full interpolant spanning the interior.
+              Reading the three crystal generators of the week, CrystalFlow, MatterGen, and OMatG, onto this map is the
+              exercise of the application section.</figcaption>
+          </figure>
+          <div class="source-note"><strong>From the readings.</strong> Stochastic Interpolants §3.2 ("One-sided
+            interpolants for Gaussian \(\rho_0\)," where the construction is introduced) and §5.1 (the explicit recovery
+            of score-based diffusion models); SiT §2.3-2.4 (specifying the interpolating process and the diffusion
+            coefficient); Flow Matching Guide §10, "Relation to Diffusion and other Denoising Models."
+            Worked in <a href="problem-2.html">Problem 2</a>.</div>
+        </section>
+
+        <section id="couplings">
+          <h2><span class="num">4.7</span>Data-dependent couplings and bridges</h2>
+          <p>Throughout, \((x_0,x_1)\) were independent: a fresh Gaussian base sample for each data sample. Nothing in
+            the velocity or score derivation used independence, only that the pair has the right endpoint marginals. A
+            <strong>data-dependent coupling</strong> draws \((x_0,x_1)\sim\pi\) with \(\pi\) dependent, and the whole
+            construction goes through: the interpolant becomes a <strong>stochastic bridge</strong> between two
+            meaningful distributions rather than from noise to data. Albergo et al. demonstrate this on conditional
+            image generation, super-resolution and in-painting, where \(x_0\) is a corrupted or downsampled image and
+            \(x_1\) the clean one. The scientific reading is ours to make: when \(x_0\) is an unrelaxed structure and
+            \(x_1\) its relaxed counterpart, or \(x_0\) a low-fidelity and \(x_1\) a high-fidelity configuration, the
+            trained interpolant becomes a learned, stochastic map between the two ensembles. The formal machinery does
+            not care which reading you take, since the derivation only ever used the endpoint marginals, and that is the
+            natural framing for translation problems in science, where both endpoints carry physical meaning and pure
+            noise is the wrong starting distribution.</p>
+          <figure class="fig"><img src="../../assets/figures/w4n-couplings.png"
+              alt="Left, an independent coupling pairing a Gaussian blob with data by long crossing lines. Right, a data-dependent coupling pairing each unrelaxed structure with its own relaxed structure by short local bridges within the same space."
+              loading="lazy" />
+            <figcaption>Independent coupling versus a data-dependent one. On the left, base and data are paired at random,
+              the noise-to-data setup of the rest of the week. On the right, each source is paired with its own target,
+              an unrelaxed structure with its relaxed counterpart, so the interpolant learns a short, local bridge within
+              one physical space. <a href="problem-4.html">Problem 4</a> builds this on the torus of fractional
+              coordinates.</figcaption>
+          </figure>
+          <div class="source-note"><strong>From the readings.</strong> Albergo et al. (Data-Dependent Couplings) §3.
+            Built in <a href="problem-4.html">Problem 4</a>; taken to the entropically optimal bridge in Week 9.</div>
+        </section>
+
+        <section id="scaling">
+          <h2><span class="num">4.8</span>Why it scales, and why science cares</h2>
+          <p>The interpolant is not only cleaner bookkeeping; the freedom it exposes measurably helps. <strong>SiT</strong>
+            holds the DiT transformer backbone fixed and turns the recipe from diffusion into an interpolant one hinge at
+            a time, discrete to continuous time, diffusion path to linear interpolant, score to velocity, fixed sampler
+            to a tunable SDE, and measures each hinge separately on ImageNet, with the swept diffusion coefficient
+            \(\epsilon_t\) giving a further gain at fixed model. Read the ablation rather than the slogan: the gains from
+            the interpolant choice and from stochastic sampling are clear, while in the parameterization table a
+            weighted score model narrowly beats the velocity, so "every hinge helps" overstates it. For science the
+            tunable stochastic sampler is the
+            attraction. Molecular and materials targets are rugged multi-well Boltzmann densities; a deterministic ODE
+            sampler is a pushforward map from the base, so it cannot add stochastic mixing or Langevin-style correction
+            during inference, while \(\epsilon_t>0\) reintroduces both a resampling term and a pull
+            toward high-density regions. <strong>OMatG</strong> builds a crystal generator on
+            this framework by using stochastic interpolants for the continuous structural variables, fractional
+            coordinates with periodic boundary conditions and lattice vectors, coupling them to <em>discrete flow
+            matching</em> for the categorical atom types, and then tuning the interpolant and the ODE-or-SDE sampler;
+            <strong>CrystalFlow</strong> (velocity-only flow) and <strong>MatterGen</strong> (diffusion) are its
+            neighboring corners, with the caveat that the velocity/score axis really describes how each model treats the
+            <em>continuous</em> fields.</p>
+          <div class="source-note"><strong>From the readings.</strong> Ma et al. (SiT) §3 ablation, with §2.4 for the
+            post-training diffusion-coefficient knob; Hoellmer et al. (OMatG) for the crystal representation and the
+            split between interpolants and discrete flow matching;
+            MatterGen and CrystalFlow for the design-space contrast. Context for Weeks 5, 9, and 11.</div>
+        </section>
+
+        <section id="ahead">
+          <h2><span class="num">4.9</span>Looking ahead: the coupling becomes the design variable</h2>
+          <p>This week fixed the interpolant and its latent width and varied the sampler. The last untouched choice is
+            the coupling. Week 5 makes <strong>couplings and optimal transport</strong> the central tool: choose
+            \(\pi(x_0,x_1)\) to straighten paths and reduce the transport cost of moving noise into scientific structure,
+            with entropic OT and Sinkhorn making the minibatch approximation of Week 3 precise. Week 9 pushes the
+            data-dependent coupling of this week to its limit: the <strong>Schrödinger bridge</strong> is the stochastic
+            bridge between two distributions that is also entropically optimal, the right object when both endpoints are
+            meaningful physical ensembles. The velocity and score you learned here are what both weeks re-pair and
+            reshape.</p>
+          <div class="source-note"><strong>From the readings.</strong> Stochastic Interpolants §3.4 ("Stochastic
+            interpolants and Schrödinger bridges") is the bridge between this week and Week 9. Sets up Week 5 (couplings
+            and OT) and Week 9 (Schrödinger bridges and stochastic control).</div>
+        </section>
+
+        <section id="recap">
+          <h2><span class="num">4.10</span>One-page recap</h2>
+          <ul>
+            <li>A stochastic interpolant is \(x_t=I_t(x_0,x_1)+\gamma_t z\); in the spatially linear case used here
+              \(x_t=\alpha_t x_0+\beta_t x_1+\gamma_t z\) with \(\gamma_0=\gamma_1=0\) and \(\gamma_t&gt;0\) inside. The
+              latent term \(\gamma_t z\) gives the marginal a smooth score at every interior time.</li>
+            <li>The velocity \(b_t(x)=\mathbb E[\dot x_t\mid x_t{=}x]\) generates \(\rho_t\) by the continuity equation
+              and is the minimizer of a simulation-free per-sample regression onto \(\dot x_t\).</li>
+            <li>The score is \(s_t(x)=-\gamma_t^{-1}\mathbb E[z\mid x_t{=}x]\) for \(\gamma_t&gt;0\), learned by
+              regressing onto the latent \(z\). With a Gaussian base and an independent coupling the path is
+              distributionally one-sided (\(x_t\overset{d}{=}\beta_tx_1+\sigma_t\xi\)), and velocity, score and denoiser
+              interconvert freely; under a dependent coupling or a non-Gaussian base they are independent fields, which
+              is why both are learned.</li>
+            <li>Given the <em>exact</em> \(b_t\) and \(s_t\), the SDE \(\mathrm dX_t=[b_t+\epsilon_t s_t]\,\mathrm dt
+              +\sqrt{2\epsilon_t}\,\mathrm dW_t\) shares the marginals \(\rho_t\) for every \(\epsilon_t\ge0\), by a
+              one-line Fokker-Planck cancellation. With learned fields they differ, which is what makes \(\epsilon_t\)
+              worth tuning.</li>
+            <li>\(\epsilon_t=0\) is the probability-flow ODE (flow matching); a matched \(\epsilon_t\) is the reverse
+              diffusion SDE. One trained model, a whole family of samplers chosen after training.</li>
+            <li>Flow matching is the \(\gamma_t=0\) deterministic corner; diffusion is the one-sided
+              \(x_t=\beta_t x_1+\gamma_t z\) corner, which uses a different endpoint convention (\(\gamma_0\neq0\): the
+              latent supplies the base). Path, target, and sampler are three independent choices.</li>
+            <li>A data-dependent coupling makes the interpolant a bridge between two meaningful ensembles (super-resolution
+              and in-painting in the paper; unrelaxed to relaxed or low to high fidelity in our setting), the
+              construction Week 9 turns into the Schrödinger bridge.</li>
+            <li>SiT measures the interpolant choices one at a time at scale, and most but not all favor the interpolant
+              recipe; OMatG builds a crystal generator on the framework, interpolants for the continuous fields and
+              discrete flow matching for atom types, with CrystalFlow and MatterGen as the velocity-only and diffusion
+              neighbors.</li>
+          </ul>
+        </section>
+
+        <section id="references">
+          <h2><span class="num">4.11</span>References</h2>
+          <p>The shorthand used in the "from the readings" notes above, with the section targets these notes rely on.</p>
+          <ul>
+            <li><strong>Stochastic Interpolants</strong> — Albergo, Boffi &amp; Vanden-Eijnden, <a
+                href="https://arxiv.org/abs/2303.08797" target="_blank" rel="noopener"><em>Stochastic Interpolants: A
+                  Unifying Framework for Flows and Diffusions</em></a> (arXiv:2303.08797). §2.1 definition, §2.2
+              transport equations and objectives, §2.3 generative models, §3.2 one-sided interpolants, §3.4 Schrödinger
+              bridges, §4 spatially linear interpolants (§4.3 the latent and diffusion coefficient), §5.1 score-based
+              diffusion.</li>
+            <li><strong>Building Normalizing Flows</strong> — Albergo &amp; Vanden-Eijnden, <a
+                href="https://arxiv.org/abs/2209.15571" target="_blank" rel="noopener"><em>Building Normalizing Flows
+                  with Stochastic Interpolants</em></a> (arXiv:2209.15571). §2 for the deterministic skeleton.</li>
+            <li><strong>Data-Dependent Couplings</strong> — Albergo et al., <a href="https://arxiv.org/abs/2310.03725"
+                target="_blank" rel="noopener"><em>Stochastic Interpolants with Data-Dependent Couplings</em></a>
+              (arXiv:2310.03725). §3.1 transport equations under a coupling, §3.2 coupling design.</li>
+            <li><strong>SiT</strong> — Ma et al., <a href="https://arxiv.org/abs/2401.08740" target="_blank"
+                rel="noopener"><em>SiT: Exploring Flow and Diffusion-based Generative Models with Scalable Interpolant
+                  Transformers</em></a> (arXiv:2401.08740). §2.3 the interpolating process, §2.4 the diffusion
+              coefficient, §3.1 parameterization, §3.2 deterministic versus stochastic sampling (Table 6 sweeps
+              \(\epsilon_t\)).</li>
+            <li><strong>Flow Matching Guide</strong> — Lipman et al., <a href="https://arxiv.org/abs/2412.06264"
+                target="_blank" rel="noopener"><em>Flow Matching Guide and Code</em></a> (arXiv:2412.06264). §4.8.1
+              "Velocity parameterizations," §10 "Relation to Diffusion and other Denoising Models."</li>
+            <li><strong>MIT 6.S184 notes</strong> — Holderrieth &amp; Erives, <a
+                href="https://diffusion.csail.mit.edu/2026/docs/lecture_notes.pdf" target="_blank"
+                rel="noopener"><em>An Introduction to Flow Matching and Diffusion Models</em></a>. §2 flow and diffusion
+              models, §3 flow matching, §4 score functions and score matching (§4.2 SDE sampling).</li>
+            <li><strong>OMatG</strong> — Hoellmer et al., <a href="https://arxiv.org/abs/2502.02582" target="_blank"
+                rel="noopener"><em>Open Materials Generation with Stochastic Interpolants</em></a> (arXiv:2502.02582).
+              Crystal representation and the split between stochastic interpolants (continuous fields) and discrete flow
+              matching (atomic species).</li>
+            <li><strong>MatterGen</strong> — Zeni et al., <a href="https://www.nature.com/articles/s41586-025-08628-5"
+                target="_blank" rel="noopener"><em>A generative model for inorganic materials design</em></a>, Nature
+              (2025). <strong>CrystalFlow</strong> — Luo et al., <a href="https://arxiv.org/abs/2412.11693"
+                target="_blank" rel="noopener"><em>CrystalFlow: A Flow-Based Generative Model for Crystalline
+                  Materials</em></a> (arXiv:2412.11693).</li>
+          </ul>
+        </section>
+
+        <div class="nextprev">
+          <a href="../week4.html">← Week 4 overview</a>
+          <a href="problem-1.html">Start the problems →</a>
+        </div>
+      </article>
+      <aside class="side" aria-label="Page contents">
+        <div class="side-title">On this page</div>
+        <a href="#one-construction">1. Two constructions to one</a>
+        <a href="#interpolant">2. The interpolant</a>
+        <a href="#velocity">3. Velocity &amp; transport</a>
+        <a href="#score">4. The score &amp; dictionary</a>
+        <a href="#family">5. Family of samplers</a>
+        <a href="#recover">6. Recovering FM &amp; diffusion</a>
+        <a href="#couplings">7. Data-dependent couplings</a>
+        <a href="#scaling">8. Why it scales</a>
+        <a href="#ahead">9. Looking ahead</a>
+        <a href="#recap">10. Recap</a>
+        <a href="#references">11. References</a>
+      </aside>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap">Built as a lightweight course site. These notes condense the readings and link out to the
+      original papers.</div>
+  </footer>
+<script src="../../assets/nav.js" defer></script>
+</body>
+
+</html>

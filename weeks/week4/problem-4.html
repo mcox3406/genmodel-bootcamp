@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 4 Problem 4 - Generative Modeling Bootcamp</title>
+  <meta name="description"
+    content="Build a data-dependent stochastic interpolant that bridges unrelaxed and relaxed crystal coordinates on the flat torus: a dependent coupling instead of noise-to-data, geodesic interpolation with periodic wrapping, and a comparison to the independent-coupling baseline, previewing OMatG and the Schrödinger bridge." />
+  <link rel="stylesheet" href="../../assets/style.css" />
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)'], ['$', '$']],
+        displayMath: [['\\[', '\\]']],
+    tags: 'all'
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+</head>
+
+<body>
+
+  <aside class="booknav" data-root="../.." aria-label="Course contents"></aside>
+
+  <header class="page">
+    <div class="wrap">
+      <div class="kicker">Week 4 · Problem 4 of 4</div>
+      <h1 class="title">Coding lab: a data-dependent coupling for structure relaxation on the torus</h1>
+      <p class="subtitle">Turn the interpolant into a bridge between two physical ensembles: pair each unrelaxed
+        structure with its relaxed counterpart, flow between them on the periodic torus of fractional coordinates, and
+        see what the dependent coupling buys over noise-to-data, a coordinate-only preview of OMatG and the Schrödinger
+        bridge.</p>
+      <nav class="actions" aria-label="Problem navigation"><a class="action" href="../week4.html">Week 4 overview</a><a
+          class="action" href="../../docs/syllabus.pdf">Syllabus</a></nav>
+    </div>
+  </header>
+  <main>
+
+    <div class="wide">
+      <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week4.html">Week 4</a> / Problem 4
+      </div>
+      <div class="problem-shell">
+        <article>
+          <div class="problem-meta"><span>coding + couplings</span><span>Week 4</span><span>selected assignment</span>
+          </div>
+          <div class="prereq">
+            <div class="prereq-col">
+              <strong>Concepts you need</strong>
+              <ul>
+                <li>The interpolant training and sampling loop (Problems 1-3)</li>
+                <li>Data-dependent couplings \((x_0,x_1)\sim\pi\) (Problem 1 part 6)</li>
+                <li>Why marginal-flow trajectories cannot cross (Week 3 Problem 2, parts 2 and 4)</li>
+                <li>The flat torus, minimum-image wrapping, and geodesic interpolation (Week 3 Problem 4)</li>
+                <li>Periodic translation invariance and the mean-free tangent fix (Week 3 Problem 4)</li>
+                <li>Fractional coordinates as a crystal representation (Week 3, FlowMM)</li>
+              </ul>
+            </div>
+            <div class="prereq-col">
+              <strong>If you get stuck</strong>
+              <ul>
+                <li><a href="https://arxiv.org/abs/2310.03725" target="_blank" rel="noopener">Albergo et al.
+                    (Data-Dependent Couplings)</a>, §3 (construction §3.2, validity theorem §3.1)</li>
+                <li><a href="https://arxiv.org/abs/2502.02582" target="_blank" rel="noopener">Hoellmer et al. (OMatG)</a>
+                  for the crystal setting: stochastic interpolants on the continuous fields, discrete flow matching on
+                  atom types</li>
+                <li>Week 3 <a href="../week3/problem-4.html">Problem 4</a> for the torus geometry, wrapping, and
+                  mean-free construction you reuse</li>
+                <li>Week 4 <a href="problem-2.html">Problem 2</a> for the ODE/SDE sampler you carry over</li>
+              </ul>
+            </div>
+          </div>
+          <div class="source-note"><strong>Source note.</strong> Original lab combining the data-dependent coupling of
+            <a href="https://arxiv.org/abs/2310.03725" target="_blank" rel="noopener">Albergo et al. (2023)</a> with the
+            flat-torus fractional-coordinate geometry of <a href="https://arxiv.org/abs/2406.04713" target="_blank"
+              rel="noopener">FlowMM</a> and the stochastic-interpolant crystal setting of <a
+              href="https://arxiv.org/abs/2502.02582" target="_blank" rel="noopener">OMatG</a>, in a coordinates-only
+            miniature. The coupling construction here is the data-dependent-couplings paper's, applied to a materials
+            task of our own choosing; it is not a reimplementation of OMatG. It is the interpolant-and-coupling
+            counterpart of Week 3 Problem 4, and the on-ramp to the Schrödinger bridge of Week 9.</div>
+
+          <div class="note">
+            <p><strong>Scope.</strong> Two ideas layered on Week 3 Problem 4's torus. First, a <em>data-dependent
+                coupling</em>: the base distribution is no longer noise but a distribution of <em>unrelaxed</em>
+              structures, each paired with its own <em>relaxed</em> target. Second, the interpolant runs between them on
+              the periodic torus. This is the smallest model that is a stochastic bridge between two meaningful
+              ensembles rather than a noise-to-data generator, the setting the data-dependent-couplings paper opens and
+              Week 9 completes.</p>
+          </div>
+          <div class="note note-blue">
+            <p><strong>Data layout.</strong> Use \(d=2\) fractional coordinates and \(n\ge2\) atoms, so a configuration
+              is a point cloud on the torus \(X\in\mathbb T^{n\times2}\), as in Week 3 Problem 4. Build a small set of
+              <em>relaxed</em> motifs \(X_1\) (the target crystal sites, some near cell boundaries so wrapping matters).
+              Generate each <em>unrelaxed</em> partner \(X_0\) by a physically-flavored perturbation of its own \(X_1\):
+              a wrapped Gaussian displacement of each site, optionally a small global shift, so that \((X_0,X_1)\) are
+              genuinely paired, not independent. This paired set is your coupling \(\pi\); part 4 contrasts it with two
+              baselines, a <em>shuffled</em> pairing that keeps the same unrelaxed base ensemble but destroys the
+              pairing (same marginals, different coupling), and a <em>noise-to-data</em> pairing that replaces the base
+              by a fresh uniform-on-torus \(X_0\).</p>
+          </div>
+
+          <p>Every earlier problem this week paired a data sample with independent noise. But nothing in the interpolant
+            required the base to be noise: the velocity and score derivations used only that \((x_0,x_1)\) has the right
+            marginals, and Problem 1 part 6 showed an arbitrary coupling keeps them valid. When the base is itself a
+            meaningful distribution, and each source is paired with a specific target, the interpolant becomes a learned,
+            stochastic <strong>map between ensembles</strong>. Structure relaxation is the canonical materials instance:
+            an unrelaxed guess (from substitution, from a fast surrogate, from a distorted template) is mapped to its
+            relaxed minimum. This lab builds that map on the torus and shows what the dependent coupling buys.</p>
+          <div class="note note-blue">
+            <p><strong>The trap this lab exists to spring.</strong> It is tempting to reason: "the ODE starts at \(x_0\)
+              and ends at \(x_1\), so training on a dependent \(\pi\) makes the model map each input to its own target."
+              <em>This is false.</em> The marginal velocity \(b_t(x)=\mathbb E[\dot x_t\mid x_t{=}x]\) is a posterior
+              average: it forgets which \(x_0\) a trajectory came from. Its flow map is therefore always a deterministic,
+              <strong>non-crossing</strong> rearrangement of \(\rho_0\) onto \(q\) (Week 3 Problem 2: trajectories of a
+              well-posed ODE cannot cross), which is in general a <em>different coupling</em> from the \(\pi\) you trained
+              on. Training on \(\pi\) does not make the ODE realize \(\pi\); this is the same fact reflow exploits. The
+              fix, and what the data-dependent-couplings paper actually does, is to <strong>condition the fields on the
+              base sample</strong>: \(b_\theta(x_t,t,x_0)\) and \(\eta_\theta(x_t,t,x_0)\). Then there is a separate ODE for
+              every \(x_0\), trajectories from different \(x_0\) may cross freely in \(x\)-space, and the model learns the
+              conditional law \(\pi(x_1\mid x_0)\). Part 4 makes you see both sides of this.</p>
+          </div>
+          <figure class="fig"><img src="../../assets/figures/w4p4.png"
+              alt="Left, an independent coupling on the torus pairing relaxed sites with uniform random points by long wrapped lines. Center, a data-dependent coupling pairing each unrelaxed structure with its own nearby relaxed structure by short local bridges. Right, the trained bridge relaxing a held-out unrelaxed configuration onto the target sites, wrapping across the periodic boundary."
+              loading="lazy" />
+            <figcaption>The coupling is the design choice. Independent pairing (left) joins each relaxed site to a random
+              point on the torus, long, crossing, global. The data-dependent coupling (center) joins each unrelaxed
+              structure to its own relaxed target, short and local. The trained interpolant (right) relaxes a held-out
+              unrelaxed configuration onto the target sites, taking the minimum-image path across the periodic
+              boundary.</figcaption>
+          </figure>
+          <p>Implement a small set of functions, reusing the torus utilities from Week 3 Problem 4.</p>
+          <pre class="code">wrap_disp(u)                        # minimum-image displacement into [-0.5, 0.5)
+to_cell(x)                          # wrap coordinates into [0, 1)
+make_pairs(n_pairs)                 # (X0, X1): unrelaxed structure and its relaxed target
+geodesic(x0, x1, t)                 # to_cell(x0 + t * wrap_disp(x1 - x0))
+interp_dot_torus(x0, x1, z, t)      # tangent velocity target with latent term, wrapped
+loss_interp(model, batch)           # velocity (+ optional score) regression on the torus
+model(x_t, t, x0=None)              # set cond=True to condition the fields on the base sample x0
+sample_bridge(model, x0, eps, n_steps)   # ODE/SDE sampler, wrapping each step
+mean_free(delta)                    # atomwise-mean-free tangent (periodic translation fix)
+shuffled_baseline(X0, X1)           # same marginals, pairing destroyed: permute X0 against X1
+noise_baseline(...)                 # same model, X0 ~ uniform-on-torus, independent of X1
+relaxation_error(pred, X1)          # gauge-invariant wrapped distance to the true relaxed target</pre>
+          <div class="note">
+            <p><strong>Conventions to fix before you start.</strong></p>
+            <p><em>Atoms are labeled and ordered.</em> Every function above (<code>wrap_disp(X1-X0)</code>,
+              <code>mean_free</code>, <code>relaxation_error</code>) compares atom \(i\) of \(X_0\) with atom \(i\) of
+              \(X_1\), so the lab assumes a fixed, consistent atom ordering across each pair, with \(n\) and \(d=2\)
+              fixed. A real crystal is invariant under relabeling, and OMatG must choose an assignment; here do
+              <em>not</em> minimize over permutations unless you take that on as extra credit. Say so explicitly in your
+              notebook, because it is the first thing this miniature assumes away.</p>
+            <p><em>The default interpolant is deterministic.</em> Take \(\gamma_t\equiv0\) for the required parts. The
+              latent term, the score head, and the SDE sampler are needed only for the optional part 6(b), and they carry
+              the wrapped-Gaussian subtlety flagged in part 2.</p>
+            <p><em>Gauge.</em> The relaxed ensemble is translation invariant (a crystal is defined only up to a global
+              fractional shift), so <code>relaxation_error</code> is computed in the <em>gauge quotient</em>: with
+              \(\delta=\mathrm{wrap\_disp}(Y-X_1)\) and \(\bar\delta=\tfrac1n\sum_i\delta_i\),
+              \[ \mathrm{err}_{\mathrm{gauge}}(Y,X_1)=\Big(\tfrac1n\textstyle\sum_i\big\|\delta_i-\bar\delta\big\|^2\Big)^{1/2}. \]
+              Report the raw (non-gauge-fixed) error alongside it, and note that a mean-free
+              (translation-equivariant) model is by construction <em>forbidden</em> to correct a global-shift component
+              of the unrelaxation.</p>
+            <p><em>Two questions, two metrics.</em> "Is the output a valid relaxed structure?" is the minimum
+              \(\mathrm{err}_{\mathrm{gauge}}\) over the finite set of relaxed motifs (distance to the relaxed
+              <em>ensemble</em>). "Is it <em>this input's</em> relaxed structure?" is \(\mathrm{err}_{\mathrm{gauge}}\)
+              against the paired \(X_1\). Most of part 4 turns on the gap between them.</p>
+            <p><em>Controls.</em> Use fixed train/test splits and hold the architecture, optimizer, solver, step count
+              and seed identical across the dependent, shuffled, and noise runs. The whole lab is a comparison; if these
+              drift, nothing in the part-4 table means anything.</p>
+          </div>
+          <ol class="parts">
+            <li><strong>Build the paired ensembles.</strong> Construct the relaxed targets \(X_1\) and their unrelaxed
+              partners \(X_0\) as described, so the coupling \(\pi=\mathrm{law}(X_0,X_1)\) is dependent (each \(X_0\) is a
+              perturbation of its own \(X_1\)). Visualize a few pairs on the torus and confirm the per-pair wrapped
+              displacement \(\mathrm{wrap\_disp}(X_1-X_0)\) is small and local, the signature of a good coupling.
+              Contrast with the independent baseline, where \(X_0\) is uniform on the torus and the displacements are
+              large and global.</li>
+            <li><strong>The interpolant on the coupling.</strong> Form the toroidal interpolant along the geodesic,
+              \(x_t=\mathrm{to\_cell}(x_0+t\,\mathrm{wrap\_disp}(x_1-x_0))\). With the default \(\gamma_t\equiv0\),
+              regress \(v_\theta(x_t,t)\) onto the tangent velocity target \(d=\mathrm{wrap\_disp}(x_1-x_0)\), exactly
+              the Problem 1 objective with the dependent \(\pi\) and the torus geometry of Week 3 Problem 4. Keep the
+              wrapping straight: you wrap <em>positions</em>, never <em>tangent vectors</em>. The displacement \(d\) is
+              already the minimum-image representative and lives in the tangent space; wrapping it again is a bug.
+              (Build the network so that conditioning on \(x_0\) is a flag you can switch on; part 5 needs it.
+              <em>Optionally</em>, for the score head of part 6(b), thicken the path with a wrapped latent \(\gamma_t z\),
+              \(z\sim\mathcal N(0,I)\), \(\gamma_0=\gamma_1=0\), a stated interior schedule such as
+              \(\gamma_t=c\sqrt{2t(1-t)}\), whose peak is \(\gamma_{\max}=c/\sqrt2\) at \(t=\tfrac12\); take
+              \(\gamma_{\max}\ll\tfrac12\) (e.g. \(c=0.1\), so \(\gamma_{\max}\approx0.07\)). The tangent target becomes
+              \(d+\dot\gamma_t z\). Note that a wrapped Gaussian's score is a theta function rather than
+              \(-z/\gamma_t\), and that the Euclidean form is an approximation, excellent for \(\gamma_t\ll\tfrac12\),
+              which you should state rather than hide.) Confirm the losses descend and that the conditional chords are
+              short because the coupling is local. Compare the loss <em>floors</em> across the three couplings of part 4
+              and explain what differs. In the ideal regression limit the irreducible loss is the posterior variance
+              \(\mathbb E\|\dot x_t-\mathbb E[\dot x_t\mid x_t]\|^2\) of Problem 1 part 4, and <em>that</em> is what the
+              coupling changes; in your finite notebook the measured floor also contains architecture and optimization
+              error and finite-sample noise, so say how you separated them, or say that you could not, rather than
+              attributing the whole gap to posterior variance.</li>
+            <li><strong>Relax a held-out structure.</strong> Take unrelaxed configurations <em>not</em> seen in training,
+              integrate the flow from \(t=0\) to \(t=1\) (start with the ODE, \(\epsilon=0\)), wrapping each step, and
+              compare the output to the true relaxed target with <code>relaxation_error</code> (wrapped distance). Show
+              the bridge moves each unrelaxed structure onto its relaxed site along the short periodic path, and report
+              the error distribution over held-out pairs.</li>
+            <li><strong>Dependent versus independent coupling: what \(\pi\) actually buys.</strong> Train the identical
+              model on two baselines. (a) The <em>noise-to-data</em> baseline: relaxed targets paired with
+              uniform-on-torus base points. (b) The <em>shuffled</em> baseline: keep the same unrelaxed ensemble as the
+              base, but pair each \(X_1\) with an unrelaxed \(X_0\) drawn independently from that ensemble rather than
+              with its own partner. Baseline (b) is the one Problem 1 part 6 actually describes: it holds both marginals
+              \(\rho_0,q\) fixed and changes <em>only</em> the coupling, so any difference from the dependent model is
+              attributable to \(\pi\) alone; baseline (a) additionally changes the base distribution. Use (b) as the
+              control that separates the two effects, and fill in a table whose columns you define <em>exactly</em>
+              before you run anything, since each admits several conventions:
+              <ul>
+                <li><em>Transport cost</em>: \(\mathbb E\|\mathrm{wrap\_disp}(X_1-X_0)\|^2\), computed on the raw pairs
+                  (a property of \(\pi\) as you built it, so not gauge-fixed).</li>
+                <li><em>Training-loss floor</em>: the plateau value, with the caveat from part 2.</li>
+                <li><em>ODE path length</em>: \(\sum_k\|\mathrm{wrap\_disp}(X_{t_{k+1}}-X_{t_k})\|\), summing
+                  minimum-image step lengths along the sampled trajectory.</li>
+                <li><em>NFE to convergence</em>: the smallest step count whose relaxation error is within a stated
+                  tolerance of the many-step limit. Fix the tolerance once and reuse it.</li>
+                <li><em>Structure quality</em>: minimum \(\mathrm{err}_{\mathrm{gauge}}\) to any relaxed motif.</li>
+                <li><em>Relaxation error</em>: \(\mathrm{err}_{\mathrm{gauge}}\) to the paired \(X_1\), on held-out
+                  \(X_0\).</li>
+              </ul>
+              Report honestly which column depends on the pairing, which on the base, and which on neither. You
+              should find that the pairing governs transport cost, loss floor and step count, that the base
+              governs achievable sample quality, and that <strong>neither improves relaxation accuracy</strong> on this
+              dataset. Explain that last, initially surprising, result: a small isotropic unrelaxation makes the relaxed
+              target of \(X_0\) simply the nearest point of the relaxed ensemble, so the marginals nearly pin the map and
+              the coupling has little left to say. Finally, show what the noise-to-data model <em>is</em> by feeding it
+              the base it was trained on: it produces valid relaxed structures unrelated to any input. It is a
+              <em>generator</em>, not a <em>translator</em>.</li>
+            <li><strong>A coupling the marginals cannot pin, and the failure of the naive bridge.</strong> Now build a
+              dataset where relaxation is <em>not</em> nearest-point projection, the physical case of an initial guess
+              that lands in the <strong>wrong basin</strong>. Take two relaxed motifs \(A,B\) and build the pairs
+              explicitly, so the failure is guaranteed rather than hoped for:
+              \[ X_0^{A}=\mathrm{to\_cell}\big(A+\lambda\,\mathrm{wrap\_disp}(B-A)+\xi\big),\qquad X_1^{A}=A, \]
+              \[ X_0^{B}=\mathrm{to\_cell}\big(B+\lambda\,\mathrm{wrap\_disp}(A-B)+\xi\big),\qquad X_1^{B}=B, \]
+              with \(\lambda=0.65\), small \(\xi\sim\mathcal N(0,\varsigma^2I)\), \(\varsigma\) well below the
+              \(A\)-to-\(B\) separation, and the same fixed atom ordering in both motifs. Each guess now sits nearer the
+              <em>other</em> minimum than its own, and the two families of chords cross. Choose \(A\) and \(B\) far
+              enough apart that the two \(X_0\) clusters are clearly separated, and check by eye that they are: if the
+              clusters overlap, the effect below will be muddied by noise rather than driven by the coupling. Only the
+              pairing knows where each structure belongs. Train the naive \(b_\theta(x_t,t)\) on this dependent \(\pi\)
+              and observe that it
+              confidently returns the <strong>wrong minimum</strong>. Explain the failure with the argument from the blue
+              box: this \(\pi\) is maximally <em>crossing</em>, and the marginal ODE cannot cross, so it delivers each
+              input to the target on its own side, generating exactly the right marginal with exactly the wrong pairing.
+              Then fix it by conditioning, \(b_\theta(x_t,t,x_0)\) (and \(\eta_\theta(x_t,t,x_0)\) if you carry the
+              latent), and show it now relaxes
+              correctly. Finally run the conditioned <em>shuffled</em> control and observe that it still fails, because
+              for it \(\pi(x_1\mid x_0)=q\) and the conditioning input carries no information. Conclude: conditioning is
+              necessary, conditioning on a meaningless coupling is useless, and you need both. State how this revises the
+              slogan "a data-dependent coupling makes the model a translator."</li>
+            <li><strong>Periodicity and the stochastic sampler.</strong> Carry over the two tools from earlier problems.
+              (a) Apply the mean-free tangent construction of Week 3 Problem 4 and be precise about what it does and does
+              not buy. Subtracting the atomwise-mean tangent removes the global translation mode, so the field
+              <em>conserves the centroid</em>; it does not by itself make the model translation equivariant. Full
+              equivariance additionally needs a shift-equivariant architecture, relative coordinates, or explicit
+              centering. Test the difference: shift the input globally, and <em>split the residual into its centroid and
+              internal parts</em>. The centroid part should be machine zero
+              (a mean-free field cannot move the centroid); the internal part will not be, and that gap is exactly the
+              equivariance the mean-free target does <em>not</em> supply. Attribute it
+              honestly to the architecture rather than the target, since an MLP on absolute periodic features
+              \((\sin2\pi x,\cos2\pi x)\) is not shift-invariant. Confirm the mean-free target costs nothing in accuracy.
+              (b) Turn on the SDE sampler (\(\epsilon>0\), Problem 2) and report its effect on the relaxation. You should
+              find that <em>every</em> \(\epsilon>0\) hurts, in contrast to Problem 3. Give the three structural reasons:
+              a bridge between nearby ensembles has small \(e^b\) for the Langevin term to contract (its loss floor in
+              part 2 says so); the task is scored <em>conditionally</em> (right output for <em>this</em> input) rather
+              than marginally, so injected noise is irreducible error rather than harmless reshuffling; and
+              \(s_\theta=-\eta_\theta/\gamma_t\) with a small \(\gamma_{\max}\) amplifies the weaker head. Stochasticity is
+              free only when you are scored on the marginal.</li>
+            <li><strong>Toward OMatG and the Schrödinger bridge.</strong> Write a short paragraph on two extensions you
+              did <em>not</em> implement. (a) <em>The full crystal</em>: OMatG applies stochastic interpolants to the
+              continuous structural fields, fractional coordinates and lattice vectors, and couples them to
+              <em>discrete flow matching</em> for the categorical atom types. Explain why a data-dependent coupling is
+              natural there (relaxation and structure prediction pair specific inputs to specific outputs across the
+              fields) and why the atom-type field is exactly the one a continuous interpolant cannot swallow, which is
+              what forces the discrete machinery (Week 7). Note also that OMatG's own use of a dependent coupling is a
+              narrower device than yours: an optional <em>element-order permutation</em> applied during training, which
+              its linear and trigonometric interpolants favor while its encoder-decoder and SBD interpolants do without.
+              Your conditioned bridge between two physical ensembles is the more general construction, not the one OMatG
+              runs. (b)
+              <em>The Schrödinger bridge</em>: your coupling was fixed by construction (you built the pairs), but the
+              <em>right</em> coupling between two ensembles is the one that is also entropically optimal. Be precise
+              about what that means, because "minimizes transport cost subject to matching the marginals" is optimal
+              transport, not the bridge: the Schrödinger bridge minimizes KL divergence on <em>path space</em> against a
+              reference diffusion, subject to the two endpoint marginals, and only approaches an optimal-transport
+              coupling in the small-noise limit. State what your lab assumed away: the pairing
+              itself, which you manufactured; any notion of its optimality (indeed your part-5 coupling is deliberately,
+              maximally non-optimal, which is precisely why the unconditioned ODE could not realize it); and the
+              possibility that \(\pi(x_1\mid x_0)\) is genuinely spread rather than nearly deterministic. Then state what
+              Week 9 adds: the coupling as a solved optimization rather than a given.</li>
+          </ol>
+          <div class="deliverable"><strong>Deliverable.</strong> <em>Required:</em> a short notebook with the paired
+            ensembles visualized on the torus, the trained bridge relaxing held-out unrelaxed structures onto their
+            targets with a wrapped-distance error distribution, the dependent-versus-shuffled-versus-noise table of part
+            4 with an explicit statement of which column each factor controls, and the wrong-basin experiment of part 5
+            showing all three runs: the naive model's failure, the conditioned model's success, and the conditioned
+            <em>shuffled</em> control's continued failure. That third run is what turns "condition on \(x_0\)" from a
+            recipe into an argument. <em>Optional / extra credit:</em> the
+            mean-free translation-equivariance check with its centroid/internal split, the SDE sampler sweep on the
+            bridge, and the paragraph placing your miniature relative to OMatG and the Schrödinger bridge.</div>
+          <div class="why"><strong>Why this matters.</strong> This is the last free choice of the whole flow-and-diffusion
+            picture, the coupling, made visible on a materials task. A data-dependent coupling <em>plus conditioning on
+            the base sample</em> turns the generative interpolant into an ensemble translator, exactly what structure
+            relaxation, fidelity upgrading, and conformer mapping need. It is the same interpolant machinery OMatG
+            carries onto the continuous fields of a crystal, though OMatG's own dependent coupling is the narrower
+            element-order permutation, and it is the construction Week 9 sharpens into the Schrödinger bridge. The
+            part-5 failure is the lesson that
+            travels furthest: an interpolant ODE trained on \(\pi\) reproduces \(\pi\)'s <em>marginals</em>, never its
+            pairing, so "I trained on paired data" buys you nothing about pairing unless the pairing reaches the network.
+            Once you have built a conditioned bridge between two ensembles on the torus, the leap to those models is a
+            change of manifold and a solved coupling, not a new idea.</div>
+
+          <div class="pager"><a href="problem-3.html">← Problem 3: One interpolant, the whole sampler family</a><a
+              href="../week5.html">Week 5: Couplings, optimal transport, and data-dependent bases →</a></div>
+        </article>
+        <aside class="problem-nav" aria-label="Week 4 problem navigation">
+          <a href="notes.html">Lecture notes</a>
+          <strong>Week 4 problems</strong>
+          <a href="problem-1.html">Problem 1: The stochastic interpolant, its velocity, and the transport equation</a><a
+            href="problem-2.html">Problem 2: The score and the ODE-SDE family that shares one set of marginals</a><a
+            href="problem-3.html">Problem 3: Coding lab: one interpolant, the whole sampler family, on a molecular
+            free-energy surface</a><a class="current" href="problem-4.html">Problem 4: Coding lab: a data-dependent
+            coupling for structure relaxation on the torus</a>
+        </aside>
+      </div>
+    </div>
+
+  </main>
+  <footer>
+    <div class="wrap">Lightweight course site for a reading, derivation, and coding group. External papers and notes
+      remain the primary source material.</div>
+  </footer>
+<script src="../../assets/nav.js" defer></script>
+</body>
+
+</html>
