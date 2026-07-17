@@ -1,6 +1,6 @@
 /* Builds the book-style sidebar table of contents, highlights the current
    page, handles the mobile drawer, and runs the on-this-page scroll-spy.
-   The course structure lives in the TOC constant below — edit here once
+   The course structure lives in the TOC constant below. Edit here once
    and every page picks it up. */
 (function () {
   'use strict';
@@ -55,7 +55,16 @@
         'Lab: a data-dependent coupling on the torus'
       ]
     },
-    5: { title: 'Couplings & optimal transport' },
+    5: {
+      title: 'Couplings & optimal transport',
+      notes: 'Couplings and optimal transport',
+      problems: [
+        'Couplings, conditional energy, and marginal velocity',
+        'Entropic OT, Sinkhorn, and minibatch bias',
+        'Lab: OT-CFM vs independent coupling',
+        'Lab: a data-dependent base on the torus'
+      ]
+    },
     6: { title: 'One-step & few-step generation' },
     7: { title: 'Discrete & hybrid generation' },
     8: { title: 'Guidance, alignment & inverse design' },

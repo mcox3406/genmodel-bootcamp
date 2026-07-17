@@ -100,10 +100,10 @@
               steps, seeds, and evaluation sample size fixed across all methods; the coupling is the only thing that
               changes. Two moons is an optional extension. <strong>Metrics.</strong> Report the <em>straightness
                 error</em> on held-out coupled pairs, \(\widehat S=\mathbb E_{(x_0,x_1),t}\|v_\theta((1-t)x_0+t
-              x_1,t)-(x_1-x_0)\|^2\) (lower is better) — this is the CFM training residual on coupled interpolant
-              points, the cheap surrogate for the trajectory straightness \(S(Z)\) of Problem 2, aligned with it but
-              evaluated on the fitted regression rather than the sampled ODE path — the transport cost \(\widehat
-              C=\mathbb E\|x_1-x_0\|^2\) of the same held-out coupling, and the energy distance
+              x_1,t)-(x_1-x_0)\|^2\) (lower is better), which is the CFM training residual on coupled interpolant
+              points and the cheap surrogate for the trajectory straightness \(S(Z)\) of Problem 2, aligned with it but
+              evaluated on the fitted regression rather than the sampled ODE path; the transport cost \(\widehat
+              C=\mathbb E\|x_1-x_0\|^2\) of the same held-out coupling; and the energy distance
               \[ \widehat D_E^2(A,B)=\frac{2}{mn}\sum_{i,j}\|a_i-b_j\|-\frac{1}{m^2}\sum_{i,j}\|a_i-a_j\|-\frac{1}{n^2}\sum_{i,j}\|b_i-b_j\|. \]
               Evaluate with 10,000 generated and 10,000 target samples, \(\mathrm{NFE}\in\{1,2,4,8,16,32,64\}\), and
               \(B\in\{16,32,64,128,256\}\); call a sampler "within tolerance" when its energy distance is within 10% of

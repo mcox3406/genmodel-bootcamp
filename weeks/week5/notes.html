@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Week 5 notes on couplings and optimal transport</title>
+  <meta name="description"
+    content="Lecture notes for Week 5: endpoint couplings, conditional-path energy versus marginal kinetic action, static and dynamic optimal transport, entropic OT and Sinkhorn, minibatch OT-CFM, rectification, informed bases, and scientific applications." />
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="../../assets/style.css" />
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(', '\\)'], ['$', '$']], displayMath: [['\\[', '\\]']],
+    tags: 'all' },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+
+<body data-chapter="5">
+  <aside class="booknav" data-root="../.." aria-label="Course contents"></aside>
+
+  <header class="page">
+    <div class="wrap">
+      <div class="kicker">Week 5 · lecture notes</div>
+      <h1 class="title">Couplings and optimal transport</h1>
+      <p class="subtitle">A compact tour from endpoint coupling and conditional-velocity ambiguity to quadratic optimal
+        transport, Sinkhorn, minibatch OT-CFM, rectification, and informed bases for scientific generation.</p>
+      <nav class="actions" aria-label="Notes navigation">
+        <a class="action" href="../week5.html">Week 5 overview</a>
+        <a class="action primary" href="problem-1.html">Problems</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <div class="wide page-layout">
+      <article>
+        <div class="breadcrumb"><a href="../../index.html">Overview</a> / <a href="../week5.html">Week 5</a> / Notes</div>
+
+        <div class="note">
+          <p>These notes condense the Week 5 readings into the ideas you need, organized by concept rather than by paper.
+            Notation continues from Weeks 3-4, with base/noise at \(t=0\), data at \(t=1\), and the straight interpolant
+            \(x_t=(1-t)x_0+t x_1\) unless stated otherwise. Throughout, the interpolant is the deterministic
+            \(\sigma=0\) case; several constructions in Tong et al. carry a positive Gaussian smoothing \(\sigma\), and
+            there the finite-\(\sigma\) endpoint is a smoothed version of the target rather than the target itself, with
+            equality recovered in the \(\sigma\to0\) limit. The through-line: a valid coupling
+            \(\pi(x_0,x_1)\) preserves the prescribed endpoint marginals but changes the intermediate path and regression
+            targets. Quadratic OT minimizes endpoint displacement, not a generic curvature or stiffness functional, and
+            the base distribution is a separate design choice.</p>
+        </div>
+
+        <section id="last-object">
+          <h2><span class="num">5.1</span>From path to pairing</h2>
+          <p>The conditional path, learned target, sampler, endpoint coupling, and base distribution are distinct design
+            axes. Earlier weeks usually drew \((x_0,x_1)\) independently, with a fresh \(x_0\sim\rho_0\) for each
+            \(x_1\sim q\). This week changes that joint sampling rule while holding the path family and network interface
+            fixed. The loss retains the same regression form, but its sampled targets, numerical value, induced marginal
+            path, and practical approximation difficulty all change.</p>
+          <div class="source-note"><strong>From the readings.</strong> Tong et al. (OT-CFM) §3, which generalizes CFM
+            from an independent source-data pairing to an arbitrary coupling; the framing continues the Week 3 note
+            "couplings preview" and the Week 4 note on data-dependent couplings. Full citations for every shorthand used
+            below are in <a href="#references">§5.12</a>.</div>
+        </section>
+
+        <section id="what-fixed">
+          <h2><span class="num">5.2</span>What a coupling leaves fixed</h2>
+          <p>A <strong>coupling</strong> is a joint law \(\pi(x_0,x_1)\) whose marginals are the base \(\rho_0\) and the
+            data \(q\). The independent coupling \(\pi=\rho_0\otimes q\) is one point in this set; every other keeps the
+            same edge distributions but correlates the two draws. The first thing to be clear about is how little a
+            coupling is allowed to change. Because the interpolant's endpoints are \(x_0\) at \(t=0\) and \(x_1\) at
+            \(t=1\), and the coupling fixes their marginals, the boundary laws \(\rho_0\) and \(\rho_1=q\) are the same
+            for every \(\pi\). And because the marginalization argument of Weeks 3-4 never used independence, only that
+            the pair has the right marginals, the whole derivation survives verbatim: the marginal velocity
+            \(b_t(x)=\mathbb E_\pi[\dot X_t\mid X_t=x]\) still solves the continuity equation for the induced marginal law
+            \(\rho_t\), and the tractable regression
+            \[
+              \mathcal L_{\rm CFM}(\theta)=\mathbb E_{\,t\sim\mathrm{Unif}[0,1],\;(X_0,X_1)\sim\pi}
+              \big\|b_\theta(X_t,t)-\dot X_t\big\|^2
+            \]
+            has \(b_t\) as its population minimizer: over unrestricted square-integrable vector fields the minimizer is
+            \(b_t(x)=\mathbb E[\dot X_t\mid X_t=x]\) for \(dt\,\rho_t(dx)\)-almost every \((t,x)\). In a restricted
+            neural-network class, training finds an approximation to that field rather than the field itself.
+            Equivalently, the corresponding marginal FM loss differs from this
+            conditional loss by a parameter-independent constant, so their parameter gradients agree.</p>
+          <p>This is an ideal population statement, not a guarantee that every trained network exactly generates \(q\).
+            Endpoint recovery also requires an appropriate population-optimal field, existence and regularity of the ODE,
+            sufficient model and optimization accuracy, and accurate numerical integration. A coupling can therefore
+            preserve the intended endpoint construction while still changing finite-model and finite-solver error.</p>
+          <div class="source-note"><strong>From the readings.</strong> Tong et al. §3.1, Theorems 3.1-3.2, including their
+            regularity conditions and the parameter-independent loss difference; Flow Matching Guide §4.9. The
+            same statement is proved directly in <a href="problem-1.html">Problem 1</a> part 1.</div>
+        </section>
+
+        <section id="curvature">
+          <h2><span class="num">5.3</span>Conditional energy and velocity ambiguity</h2>
+          <p>The velocity the network learns is not the per-sample velocity \(\dot x_t=x_1-x_0\); it is the
+            <em>marginal</em> velocity, the average of \(\dot x_t\) over all endpoint pairs whose interpolant passes
+            through the current state \(x\). Under an independent coupling, nearby conditional paths can imply conflicting
+            velocities. Their conditional mean need not resemble any individual velocity, creating a nonzero regression
+            residual and often a more complicated marginal field. ODE uniqueness concerns two trajectories occupying the
+            same state at the same <em>time</em>; ordinary intersections of line segments in a two-dimensional drawing are
+            only a heuristic diagnostic.</p>
+          <p>For the straight conditional interpolant,
+            \[
+              \mathbb E\!\int_0^1\|\dot X_t\|^2\,dt=\mathbb E_\pi\|X_1-X_0\|^2.
+            \]
+            This is the <strong>conditional-path energy</strong>, equal to the quadratic endpoint cost. The marginal
+            velocity has kinetic action
+            \[
+              \int_0^1\mathbb E\|b_t(X_t)\|^2\,dt
+              \leq \mathbb E_\pi\|X_1-X_0\|^2,
+            \]
+            by conditional Jensen. The gap is
+            \(\int_0^1\mathbb E\|\dot X_t-b_t(X_t)\|^2dt\), the integrated conditional velocity variance and the
+            population Bayes residual for predicting \(\dot X_t\) from \((t,X_t)\). It is irreducible given those
+            regression inputs and an unrestricted predictor; a finite network carries approximation and optimization
+            error on top of it. Equality holds when the conditional velocity is determined by
+            \((t,X_t)\). Transport cost is therefore neither curvature nor stiffness: for example, a large translation has
+            high cost and exactly straight paths. Lower ambiguity can improve finite-model or solver behavior, but that is
+            an empirical consequence to measure.</p>
+          <div class="source-note"><strong>From the readings.</strong> Liu et al. (Rectified Flow) §2.1-2.2, the
+            straightness functional and convex transport-cost monotonicity; Tong et al. §3.2 on OT-CFM and path energy.
+            The energy decomposition is proved in <a
+              href="problem-1.html">Problem 1</a> parts 2-3.</div>
+        </section>
+
+        <section id="ot">
+          <h2><span class="num">5.4</span>Optimal transport, static and dynamic</h2>
+          <p>Quadratic <strong>optimal transport</strong> minimizes a precise quantity: expected squared endpoint
+            displacement. The Kantorovich problem asks for
+            \[ W_2^2(\rho_0,q)=\min_{\pi\in\Pi(\rho_0,q)}\int\|x_1-x_0\|^2\,\mathrm d\pi(x_0,x_1),
+               \qquad
+               \pi^\star\in\operatorname*{arg\,min}_{\pi\in\Pi(\rho_0,q)}\int\|x_1-x_0\|^2\,\mathrm d\pi, \]
+            over all couplings with the prescribed marginals. Write the minimizer with \(\in\) rather than \(=\): the
+            arg min is a set, and as noted below the optimizer need not be unique or map-induced. If \(\rho_0\) is
+            absolutely continuous with respect to
+            Lebesgue measure and the distributions have finite second moments, Brenier's theorem gives an a.e.-unique
+            optimal map \(T=\nabla\phi\) for a convex \(\phi\). Its interpolation
+            \(X_t=(1-t)X_0+tT(X_0)\) is the Wasserstein displacement interpolation. Under the regularity needed for this
+            map-induced flow, the endpoint velocity is determined by the current state, so conditional and marginal
+            velocities agree \(dt\,\rho_t(dx)\)-almost everywhere along the displacement interpolation. A general
+            Kantorovich optimizer need not be a map.</p>
+          <p>Empirical equal-weight OT is a different case. With the same number of source and target samples, an optimal
+            plan <em>can be chosen</em> as a permutation, so every displayed source is paired to exactly one displayed
+            target. That conclusion follows from the geometry of the assignment polytope, not from Brenier's
+            theorem, and it is an existence statement rather than a uniqueness one: when the cost matrix has ties,
+            several optimal permutations and their convex combinations can all be optimal.</p>
+          <p>The same optimal value has a <strong>dynamic</strong> form, and it is the one that connects OT to this
+            course's
+            velocity fields. The Benamou-Brenier theorem writes the squared-Wasserstein distance as a least-action
+            problem over measures and velocity fields,
+            \[ W_2^2(\rho_0,q)=\min_{\rho_t,v_t}\ \int_0^1\!\!\int\|v_t(x)\|^2\,\mathrm d\rho_t(x)\,\mathrm dt
+            \quad\text{s.t.}\quad \partial_t\rho_t+\nabla\!\cdot(\rho_t v_t)=0,\ \rho_0,\rho_1\text{ fixed}, \]
+            the minimum kinetic action over all sufficiently regular flows carrying \(\rho_0\) to \(q\). Under the map
+            assumptions above, the minimizer is the displacement interpolation. The Kantorovich and Benamou-Brenier
+            problems are equivalent static and dynamic formulations of \(W_2^2\); they are not Legendre duals of each
+            other. Each formulation has a separate dual problem.</p>
+          <figure class="fig"><img src="../../assets/figures/w5n-couplings.png"
+              alt="Two cells over the same three-mode target. Left, an independent coupling has eight geometric segment intersections and high mean squared displacement. Right, an exact one-to-one empirical optimal-transport assignment of the same points has one segment intersection and lower displacement."
+              loading="lazy" />
+            <figcaption>The same base and data points paired two ways. The <strong>independent</strong> coupling (left)
+              produces many crossing, long segments and a high transport cost \(\mathbb E\|x_1-x_0\|^2\); the
+              <strong>optimal-transport</strong> coupling (right) re-pairs the identical points to minimize that cost,
+              and the segments shorten. In this two-dimensional sample, the assignment also reduces the displayed
+              geometric segment intersections from eight to one. Both panels use every source and every target exactly once; only their
+              permutation changes.</figcaption>
+          </figure>
+          <div class="source-note"><strong>From the readings.</strong> Peyré &amp; Cuturi §2.1-2.3 (Monge, Kantorovich,
+            and finite assignments), Remark 7.1 and Eq. (7.6) (map-induced displacement interpolation; Brenier's theorem
+            is Theorem 2.1 in §2.5), and §7.1 (the continuous dynamic Benamou-Brenier formulation); Flow Matching Guide §4.7 (the
+            straight path as the dynamic-OT displacement). Static and dynamic OT are both used in <a
+              href="problem-1.html">Problem 1</a> parts 3-4.</div>
+        </section>
+
+        <section id="sinkhorn">
+          <h2><span class="num">5.5</span>Entropic OT and the Sinkhorn algorithm</h2>
+          <p>Exact OT between two empirical distributions of size \(n\) is a linear program with \(n^2\) variables. A
+            full-dataset plan is generally too expensive to recompute inside a training loop, although a small exact
+            assignment can be practical within a minibatch. <strong>Entropic regularization</strong> provides a fast,
+            smooth alternative. This whole section is the <em>finite discrete</em> problem: write the two weight vectors
+            as \(a\) and \(b\), and the plan as a matrix \(P\). Add an entropy term to the transport cost,
+            \[ P^\varepsilon=\operatorname*{arg\,min}_{P\in\Pi(a,b)}\ \langle P,C\rangle-\varepsilon\, H(P),\qquad
+            H(P)=-\!\sum_{ij}P_{ij}\big(\log P_{ij}-1\big), \]
+            and the problem becomes strictly convex, with a <strong>factorized scaling form</strong> for its solution:
+            the optimal plan is a diagonal rescaling of the Gibbs kernel \(K_{ij}=e^{-C_{ij}/\varepsilon}\),
+            \[ P^\varepsilon=\operatorname{diag}(u)\,K\,\operatorname{diag}(v), \]
+            for two positive vectors \(u,v\) fixed by the marginal constraints. Those constraints are two equations,
+            \(P\mathbf 1=a\) and \(P^\top\mathbf 1=b\), and the
+            <strong>Sinkhorn</strong> algorithm solves them by the obvious alternation: rescale the rows so they sum to
+            \(a\), rescale the columns so they sum to \(b\), repeat. Each half-step uses matrix-vector operations
+            that parallelize well. For positive \(K\) the alternating scaling converges, though small \(\varepsilon\)
+            conditions the problem poorly and typically increases the iteration count.</p>
+          <p>The regularization \(\varepsilon\) is a dial between two familiar couplings, and in the finite discrete
+            problem the two limits are these. As \(\varepsilon\to\infty\) the
+            entropy dominates and \(P^\varepsilon\) converges to the <em>independent</em> coupling \(a b^\top\), the
+            maximally spread-out pairing. As \(\varepsilon\to0\) the cost dominates and the limit points of
+            \(P^\varepsilon\) are unregularized OT optimizers; when that optimizer is not unique, the entropic limit
+            selects the maximum-entropy optimal plan under the usual finite-dimensional assumptions. A permutation limit
+            is expected only in the equal-size, uniform empirical
+            assignment setting with an appropriate unique optimum; general OT plans may split mass. Because Cuturi
+            parameterizes by \(\lambda=1/\varepsilon\), state these limits as \(\varepsilon\to\infty\) and
+            \(\varepsilon\to0\) rather than as "large" and "small" regularization, which reverse between the two
+            conventions.</p>
+          <figure class="fig"><img src="../../assets/figures/w5n-sinkhorn.png"
+              alt="Three coupling matrices between equal-size source and target samples at decreasing entropic regularization after normalizing the displayed cost matrix by its maximum. At epsilon 0.5 the matrix is diffuse; at epsilon 0.05 mass is more concentrated; at epsilon 0.006 the plan is sharp but still soft."
+              loading="lazy" />
+            <figcaption>The entropic OT plan as the regularization \(\varepsilon\) shrinks. At large \(\varepsilon\)
+              the plan approaches the independent coupling; the left panel is a diffuse finite-\(\varepsilon\) example,
+              and the mass concentrates toward an unregularized OT solution as \(\varepsilon\) decreases (center, right).
+              For this figure only, \(C\) is divided by its maximum, so the displayed \(\varepsilon\) values are
+              dimensionless and figure-specific. The right panel is a sharp soft plan, not a hard assignment. Sinkhorn
+              computes these plans by alternating row and column rescaling of \(K=e^{-C/\varepsilon}\).</figcaption>
+          </figure>
+          <div class="source-note"><strong>From the readings.</strong> Cuturi (Sinkhorn Distances) §3 (the entropy-constrained distance) and §4 (the entropic
+            penalty problem and the matrix-scaling iteration), noting his \(\lambda=1/\varepsilon\); Peyré &amp; Cuturi
+            §4.1-4.2 for the dual, the convergence analysis, and the \(\varepsilon\to0\) and \(\varepsilon\to\infty\)
+            limits of the discrete problem.
+            Derived, with the two regularization limits, in <a href="problem-2.html">Problem 2</a> parts 1-3.</div>
+        </section>
+
+        <section id="minibatch">
+          <h2><span class="num">5.6</span>Minibatch OT and OT-CFM</h2>
+          <p>Computing a full-data OT plan would require a matrix spanning the dataset and is infeasible at scale. The
+            practical move is the <strong>minibatch</strong> approximation: inside each training batch of \(m\) base and
+            \(m\) data samples, compute either a small exact OT plan or an entropically regularized plan with Sinkhorn,
+            sample pairs from that plan, and regress the velocity on those pairs. This is the coupling step in
+            <strong>OT-CFM</strong>. It costs one small OT solve per batch (Sinkhorn only in the regularized case) and is
+            a drop-in change to the sampling of \((x_0,x_1)\) in an otherwise ordinary flow-matching loop.</p>
+          <p>The subtlety is what the minibatch plan actually is. Averaging the random size-\(m\) batch construction
+            defines a population coupling \(\pi^{(m)}\), and \(\pi^{(m)}\) generally differs from the population OT
+            coupling \(\pi^\star\): an OT matching within a random size-\(m\) subset pairs points that the full
+            OT plan would not. Resist calling it an unbiased or biased <em>estimator</em> of \(\pi^\star\). A batch plan
+            is supported on random batch points and does not live in the same space as a fixed population plan. Under
+            the assumptions in Pooladian et al., as \(m\to\infty\) the <em>optimal marginal
+            vector field</em> induced by BatchOT attains vanishing Joint-CFM objective and vanishing straightness, and
+            the flow map it induces attains the optimal transport cost \(W_2^2\). That statement concerns the induced
+            field and its map, not the cost of any single minibatch permutation, and it is asymptotic rather than a claim
+            that a finite batch "reaches the support size." The crucial
+            separate fact is that the random minibatch construction has the correct population marginals: averaging over
+            random batches returns \(\rho_0\) and \(q\). Therefore it defines a valid population coupling and the CFM
+            identity in §5.2 applies to the marginal path induced by that coupling.</p>
+          <p>This does not prove that a finite trained sampler is unbiased, nor that every batch size reduces variance or
+            solver cost. Small batches may give a poor approximation to population OT and a harder learned field; finite
+            model, optimization, and integration errors can then distort generated basin populations. Diagnose the
+            coupling separately from the generated distribution.</p>
+          <figure class="fig"><img src="../../assets/figures/w5n-straight.png"
+              alt="Two cells over the same three-mode target showing trajectories obtained by integrating a kernel estimate of the marginal velocity from the same starting points. The estimates use independent endpoint pairs on the left and an exact empirical OT assignment on the right."
+              loading="lazy" />
+            <figcaption>An illustrative regression diagnostic, not a trained-model comparison. Both panels integrate a
+              Nadaraya-Watson kernel estimate of \(b_t(x)=\mathbb E[\dot X_t\mid X_t=x]\), using independent endpoint
+              pairs (left) or an exact one-to-one empirical OT assignment (right). The figure visualizes how the coupling
+              changes an estimated marginal field; it makes no claim about endpoint sample quality or ODE step count.</figcaption>
+          </figure>
+          <div class="source-note"><strong>From the readings.</strong> Tong et al. §3.2 (the minibatch OT-CFM
+            construction and path-energy experiments); Pooladian et al. §3 (flow matching with joint couplings), §4 (the multisample
+            construction, BatchOT, and its asymptotics), and §6 (experiments); Fatras et al. §3.3-§3.5 for the pre-CFM
+            version of the question, and for the distinction this section turns on: the minibatch loss is an unbiased
+            estimator of its own expectation \(U_h\), which upper-bounds \(W\) and is not a metric. Explored against
+            batch size in <a
+              href="problem-2.html">Problem 2</a> and <a href="problem-3.html">Problem 3</a>.</div>
+        </section>
+
+        <section id="reflow">
+          <h2><span class="num">5.7</span>Rectification as coupling improvement</h2>
+          <p><strong>Reflow</strong>, from rectified flow, updates the endpoint coupling without solving OT. Given the
+            current deterministic ODE flow map \(\Phi_1\), form the coupling \((X_0,Z_1)\) with \(Z_1=\Phi_1(X_0)\) and
+            retrain on the straight interpolants between those endpoints. Be precise about what this does and does not
+            achieve. The induced coupling is <em>already</em> deterministic the moment the flow map is integrated, since
+            \(Z_1\) is a function of \(X_0\); repeated reflow is aimed at reducing the straightness functional and the
+            conditional-velocity residual, not at manufacturing determinism it already has. In the exact population
+            construction, Liu et al. prove marginal preservation (Theorem 3.3) and non-increase of convex displacement
+            costs \(\mathbb E[c(X_1-X_0)]\) for convex \(c:\mathbb R^d\to\mathbb R\) (Theorem 3.5), where \(c\) applies
+            to the <em>displacement</em> rather than to the two endpoints separately. They also show that recursive
+            rectification straightens at an \(O(1/K)\) rate (Theorem 3.7).</p>
+          <p>Those properties do not identify the result with quadratic OT. The Rectified Flow paper explicitly notes that
+            recursive rectification does not generally attain a \(c\)-optimal coupling, except for a special one-dimensional
+            result. Hertrich et al. sharpen the gap considerably. On disconnected supports they exhibit couplings that are
+            fixed points of the gradient-constrained rectification operator \(R^p\) with zero constrained loss and are
+            still not optimal; their positive result recovers the equivalence only under full support,
+            \(\operatorname{supp}(X_t)=\mathbb R^d\), plus smoothness and rectifiability. Their sharpest statement is a
+            gap in cost, not a distance between couplings: the constrained loss and the endpoint-marginal \(W_2\)
+            separation can both be made arbitrarily small while the kinetic action and the endpoint quadratic cost stay
+            near a positive constant, against an optimum of zero. The available convergence guarantees
+            bound the loss, and the loss does not bound the cost gap. Their verdict is that enforcing a gradient
+            constraint on rectified flows is "in general, not a reliable method for computing optimal transport maps."
+            OT-CFM and reflow should therefore be contrasted, not treated as approximations to the same coupling:
+            OT-CFM solves either an exact or an entropically regularized OT problem within each batch, whereas reflow
+            adopts the deterministic coupling induced by the current learned flow and requires another training round. Learned-flow error also means its generated
+            endpoint marginal need not be exactly the data marginal.</p>
+          <div class="source-note"><strong>From the readings.</strong> Liu et al. §2.2 introduces reflow, but cite the
+            theorems for the theorem-level claims: §3.1 Theorem 3.3 (marginal preservation), §3.2 Theorem 3.5 (convex
+            displacement costs do not increase), §3.3 Theorem 3.7 (\(O(1/K)\) straightening), and §3.4 on straight versus
+            optimal couplings, where Theorem 3.8 gives \(c\)-optimal \(\Rightarrow\) straight and Theorem 3.10 the
+            one-dimensional coincidence. The failure of the converse in higher dimensions is argued in that
+            section's prose rather than in a numbered theorem. All of it is the exact population construction.
+            Hertrich et al. (v3) §4 for the
+            counterexamples (§4.1 disconnected supports, Proposition 10 on \(R^p\) fixed points; Theorem 11 for the
+            full-support repair; Corollary 17 for the cost/action gap; §4.2 Proposition 13 for a non-rectifiable
+            zero-loss coupling that is still not optimal) and for the
+            precise target, Theorem 5.6 of Qiang Liu's marginal-preserving companion paper (arXiv:2209.14577); Tong et
+            al. §3.2.3 for OT-CFM. Their
+            distinct objectives are compared in <a href="problem-1.html">Problem 1</a> part 5.</div>
+        </section>
+
+        <section id="bases">
+          <h2><span class="num">5.8</span>Data-dependent bases</h2>
+          <p>Everything so far re-pairs a <em>fixed</em> base to the data. The second lever changes the base itself.
+            Nothing in the interpolant requires \(\rho_0=\mathcal N(0,I)\), but be careful how far "you only need to
+            sample it" reaches. To <em>define</em> the sample-based interpolation and regression objective, the source
+            need only be sampleable. Exact transport by a regular deterministic ODE additionally requires suitable
+            regularity and source-target compatibility, and score objectives impose their own density and smoothness
+            requirements. If another sampleable distribution is closer to the
+            target in an appropriate transport geometry, using it as the base can reduce the minimum endpoint cost. Mere
+            visual overlap is not a proof of closeness; \(W_2\), a task-specific quotient metric, or a natural paired cost
+            should be measured.</p>
+          <p>A corrupted observation is a concrete data-dependent base: Albergo et al. generate a base conditionally on a
+            target for tasks such as inpainting and super-resolution. The physical version is not hypothetical either.
+            Luo et al. bridge coarse force-field geometries to DFT equilibrium structures, and unrelaxed
+            adsorbate-catalyst complexes to their relaxed states; FlowLLM replaces a uniform crystal base with a language
+            model's metastable output. Both still need what any base needs: a sampleable source law and a justified
+            coupling to the target. Be careful about how Luo et al. differ from this week's framing, because the obvious
+            statement is wrong: they do have an explicit source marginal, \(q_{\rm data}(R^{t_0})\), and their bridge is
+            proved to preserve the paired joint law \(q_{\rm data}(R^{t_0},R^{t_1})\). The difference is that theirs is a
+            <em>conditional</em> bridge over a task-given joint distribution. It runs from \(R_0=R^{t_0}\) to sample
+            \(q_{\rm data}(R^{t_1}\mid R^{t_0})\), and paired examples supply the coupling. That is not an
+            unconditional source-to-data flow whose base happens to be a physical ensemble. Composition or space group is usually <em>conditioning information</em>,
+            not itself a base distribution. Base design and conditioning should be kept conceptually separate.</p>
+          <figure class="fig"><img src="../../assets/figures/w5n-bases.png"
+              alt="Two cells over the same three-mode target. Left, a Gaussian base sits in the center and OT lines travel a long way to reach the three modes, with a high transport cost. Right, a data-dependent base whose points already sit near the three modes, so the OT lines are short and the transport cost is much smaller."
+              loading="lazy" />
+            <figcaption>The base as a design choice. A <strong>Gaussian base</strong> (left) is far from the data, so
+              even the optimal coupling must transport mass a long way. A <strong>data-dependent base</strong> (right),
+              a toy informed ensemble constructed near the data modes, has a lower empirical OT cost. This illustrates a
+              possible benefit; it is not evidence that every informed base is closer or yields a better trained model.</figcaption>
+          </figure>
+          <div class="source-note"><strong>From the readings.</strong> Albergo et al. §3 for the coupled construction
+            and its assumptions and §4.1-4.2 for the image applications (arXiv v3 / ICML numbering; preprints v1-v2 used
+            §2), noting that the paper supports data-dependent couplings for <em>conditional</em> generation rather than
+            a swap of the unconditional base; GDB §4.1 for a coarse force-field geometry as the
+            low-fidelity endpoint and §3.1 for the bridge construction; FlowLLM §4.1 and §4.3 for a learned, non-Gaussian
+            base and the consequences of choosing one. Built as a
+            low-to-high-fidelity extension in <a
+              href="problem-4.html">Problem 4</a>.</div>
+        </section>
+
+        <section id="science">
+          <h2><span class="num">5.9</span>Where couplings help science, and where they mislead</h2>
+          <p>The couplings and bases of this week are efficiency levers, but on scientific targets they are also
+            modelling choices. One important case is <strong>symmetry</strong>. Many molecular energy models are
+            invariant under global translations, proper rotations, and permutations of identical atoms. A normalizable
+            molecular density on unrestricted Cartesian space cannot itself be globally translation invariant, so the
+            equivariant-flow-matching construction removes translation by working with mean-free configurations. It then
+            computes the OT cost modulo the chosen symmetry group. Configurations related by that group are equivalent
+            <em>for the modelling objective</em>, while a naive Euclidean OT plan measures a large cost between them and
+            wastes capacity undoing gauge motion. Choose the group for the task rather than by reflex: quotienting by
+            reflections is wrong for chiral targets, where a reflection can leave an idealized energy unchanged while
+            exchanging physically distinct enantiomers, which is why the practical constructions here restrict to proper
+            rotations and handle chirality separately. The exact minimization over that joint group is infeasible in
+            practice, so the cost is approximated by a sequential alignment (an optimal permutation, then a rotation).
+            That approximates the symmetry-reduced cost rather than solving an exact quotient-space OT. Periodic
+            crystal models handle global translations separately on the
+            torus. The empirical benefit is task-dependent: in the cited alanine experiment, standard and equivariant OT
+            trade places across metrics rather than one universally dominating.</p>
+          <p>The failure modes are just as concrete. <em>Finite-batch approximation:</em> on a strongly multimodal target,
+            small-batch OT can be far from the population OT coupling even though its population endpoint marginals remain
+            correct. A finite model or solver may then distort basin populations, so coupling diagnostics and generated
+            samples should both be checked. <em>Base mismatch:</em> under the usual regularity assumptions an ODE flow map is
+            invertible, and therefore constrains exact transport between distributions with topologically incompatible
+            supports; a poorly chosen base can make approximation difficult. Keep the two claims apart, because they are
+            routinely conflated: invertibility does <em>not</em> preserve the number of density modes, so a unimodal
+            full-support base can perfectly well be mapped to a multimodal full-support density. It is topology, not
+            multimodality, that obstructs. <em>Cost:</em> OT and symmetry
+            reduction add per-batch computation, and whether improved regression geometry repays it depends on the model
+            and sampling budget.</p>
+          <div class="source-note"><strong>From the readings.</strong> Klein, Krämer &amp; Noé (Equivariant Flow
+            Matching) for symmetry-reduced OT couplings on a molecular Boltzmann target; SemlaFlow §4 for the
+            <em>alignment</em> half of that construction only, an atom permutation and rotation that minimize MSE within
+            each already-paired sample, with no batch reassignment, so its coupling stays independent up to within-orbit
+            alignment; React-OT (Methods, "Equivariance in modelling chemical reactions")
+            for permutation, rotation and reflection alignment on transition states; Pooladian et al. on minibatch
+            asymptotics. Explored in <a href="problem-3.html">Problem 3</a> and <a href="problem-4.html">Problem
+            4</a>.</div>
+        </section>
+
+        <section id="ahead">
+          <h2><span class="num">5.10</span>Looking ahead: straightness becomes one step</h2>
+          <p>This week used couplings and bases to reduce conditional displacement and, in favorable cases, velocity
+            ambiguity. Every well-posed deterministic ODE already defines an endpoint map; the practical question is how
+            accurately a finite model and solver approximate it. Week 6,
+            <strong>one-step and few-step generation</strong>, studies methods that learn or distill a finite-time map or
+            a consistency relation. Consistency models, progressive distillation, and flow-map methods all reduce
+            generation to one or a few network evaluations rather than the many-step ODE this week made cheap. They do
+            not all learn the same mathematical object. Low-ambiguity paths can help but do not guarantee one-step
+            quality. Further out, Week 9 studies the <strong>Schrödinger bridge</strong>: minimize path-space relative
+            entropy to a chosen reference process subject to endpoint constraints. Brownian reference dynamics connect it
+            to entropic dynamic OT, but it is not a universal stochastic optimum of the couplings in this week.</p>
+          <div class="source-note"><strong>From the readings.</strong> Tong et al. §3.2.4 (SB-CFM) previews the entropic
+            bridge construction; Léonard's survey is the canonical source for the Schrödinger problem itself, its
+            Brownian reference process, and its small-noise limit to OT; Liu et al. §2.2 for rectification's straightness
+            functional. Sets up
+            Week 6 (few-step generation) and Week 9 (Schrödinger bridges and stochastic control).</div>
+        </section>
+
+        <section id="recap">
+          <h2><span class="num">5.11</span>One-page recap</h2>
+          <ul>
+            <li>A valid coupling \(\pi(x_0,x_1)\) preserves the prescribed endpoint laws but changes the intermediate
+              marginal path, regression targets, loss value, and marginal velocity. Exact endpoint generation additionally
+              requires an accurately learned, regular field and accurate integration.</li>
+            <li>For a straight conditional interpolant,
+              \(\mathbb E\!\int\|\dot X_t\|^2dt=\mathbb E_\pi\|X_1-X_0\|^2\). The marginal kinetic action is no larger;
+              their gap is integrated conditional velocity variance. Endpoint cost is not curvature or stiffness.</li>
+            <li>The squared-Euclidean OT coupling minimizes the transport cost among all couplings with the given
+              marginals. With an absolutely continuous source and finite second moments, Brenier gives an a.e.-unique map
+              \(T=\nabla\phi\); equal-weight empirical OT instead admits an optimal assignment permutation.
+              Benamou-Brenier is an equivalent dynamic minimum-action formulation.</li>
+            <li>Entropic OT adds \(-\varepsilon H(\pi)\); its solution is a diagonal rescaling \(u_i K_{ij}v_j\) of
+              \(K=e^{-C/\varepsilon}\), found by <strong>Sinkhorn</strong> (alternate row/column rescaling).
+              \(\varepsilon\to\infty\) gives the independent coupling, while \(\varepsilon\to0\) approaches the OT
+              solution set. A permutation limit requires the appropriate discrete assignment setting.</li>
+            <li><strong>OT-CFM</strong> computes a small OT plan per minibatch. The plan is biased for the population OT
+              plan but defines a valid population coupling with the correct endpoint marginals. CFM is exact for its
+              induced marginal path in the population limit; batch size trades OT approximation against cost.</li>
+            <li><strong>Reflow</strong> iterates on the coupling induced by its current learned flow and non-increases
+              convex endpoint costs in the ideal analysis. It does not generally converge to quadratic OT.</li>
+            <li>A <strong>data-dependent base</strong> changes \(\rho_0\) itself and can reduce transport when its
+              closeness to the target is verified (for example, for an appropriate corrupted or low-fidelity ensemble).
+              Composition conditioning is a separate design choice. Valid base and coupling constructions retain the
+              prescribed target endpoint ideally; both can affect finite-model error.</li>
+            <li>On scientific targets, symmetry-reduced OT couplings (equivariant flow matching) can reduce displacement
+              due only to gauge choices, with task-dependent empirical gains. Finite-batch error, symmetry metrics,
+              support topology, capacity, and solver accuracy are the failure modes to watch. Schrödinger bridges optimize
+              path-space KL relative to a chosen reference process, a different objective from OT-CFM and reflow.</li>
+          </ul>
+        </section>
+
+        <section id="references">
+          <h2><span class="num">5.12</span>References</h2>
+          <p>The shorthand used in the "from the readings" notes above, with the section targets these notes rely on.</p>
+          <ul>
+            <li><strong>OT-CFM</strong>. Tong et al., <a href="https://arxiv.org/abs/2302.00482" target="_blank"
+                rel="noopener"><em>Improving and Generalizing Flow-Based Generative Models with Minibatch Optimal
+                  Transport</em></a> (arXiv:2302.00482). §3.1 general conditional flow matching over an arbitrary conditioning law
+              (Theorems 3.1-3.2), §3.2 its coupling instantiations: the design-space table and the minibatch OT-CFM
+              and SB-CFM constructions.</li>
+            <li><strong>Multisample Flow Matching</strong>. Pooladian et al., <a href="https://arxiv.org/abs/2304.14772"
+                target="_blank" rel="noopener"><em>Multisample Flow Matching: Straightening Flows with Minibatch
+                  Couplings</em></a> (arXiv:2304.14772). §3 flow matching with a general joint coupling, §4 the multisample
+              construction (Lemma 4.1) and BatchOT with its asymptotic cost optimality and straightening (Theorem 4.2),
+              and §6 experiments.</li>
+            <li><strong>Rectified Flow</strong>. Liu, Gong &amp; Liu, <a href="https://arxiv.org/abs/2209.03003"
+                target="_blank" rel="noopener"><em>Flow Straight and Fast: Learning to Generate and Transfer Data with
+                  Rectified Flow</em></a> (arXiv:2209.03003), ICLR 2023. §2.1 the
+              rectified-flow ODE from a coupling, §2.2 the reflow recursion and straightness functional; for the
+              theorems, §3.1 Theorem 3.3 (marginal preservation), §3.2 Theorem 3.5 (convex displacement costs), §3.3
+              Theorem 3.7 (\(O(1/K)\) straightening), §3.4 Theorems 3.8 and 3.10 (straight versus \(c\)-optimal, and the
+              one-dimensional case). Single arXiv version, so the numbering is stable.</li>
+            <li><strong>Marginal-Preserving Rectified Flow</strong>. Qiang Liu, <a
+                href="https://arxiv.org/abs/2209.14577" target="_blank" rel="noopener"><em>Rectified Flow: A Marginal
+                  Preserving Approach to Optimal Transport</em></a> (arXiv:2209.14577). §5, especially Theorem 5.6,
+              which Hertrich et al. show requires stronger support assumptions. Cited in <a href="#reflow">§5.7</a>;
+              an unrefereed preprint, so read it against Hertrich et al. rather than on its own.</li>
+            <li><strong>Sinkhorn Distances</strong>. Cuturi, <a href="https://arxiv.org/abs/1306.0895" target="_blank"
+                rel="noopener"><em>Sinkhorn Distances: Lightspeed Computation of Optimal Transportation Distances</em></a>
+              (arXiv:1306.0895). §3 the entropy-constrained Sinkhorn distance, §4 the entropic penalty
+              problem and the matrix-scaling iteration.</li>
+            <li><strong>Computational OT</strong>. Peyré &amp; Cuturi, <a href="https://arxiv.org/abs/1803.00567"
+                target="_blank" rel="noopener"><em>Computational Optimal Transport</em></a> (arXiv:1803.00567). §2.1-2.3
+              Monge/Kantorovich and finite assignments, Remark 7.1 and Eq. (7.6) for map-induced displacement
+              interpolation (Brenier's theorem: Theorem 2.1, §2.5), §4.1-4.2 entropic OT and Sinkhorn, and §7.1 the
+              continuous dynamic formulation.</li>
+            <li><strong>Data-Dependent Couplings</strong>. Albergo et al., <a href="https://arxiv.org/abs/2310.03725"
+                target="_blank" rel="noopener"><em>Stochastic Interpolants with Data-Dependent Couplings</em></a>
+              (arXiv:2310.03725). §3.1 transport equations under a coupling, §3.2 designing data-dependent couplings,
+              §3.3 reducing transport costs via coupling, §4.1-4.2 the image applications. Numbering per arXiv v3, which
+              is the ICML version and what the unversioned link serves; preprints v1-v2 used §2 and §3.1-3.2.</li>
+            <li><strong>Flow Matching Guide</strong>. Lipman et al., <a href="https://arxiv.org/abs/2412.06264"
+                target="_blank" rel="noopener"><em>Flow Matching Guide and Code</em></a> (arXiv:2412.06264). §4.7
+              optimal transport and linear conditional flow, §4.9 data couplings; affine conditional flows are treated
+              separately in §4.8.</li>
+            <li><strong>Equivariant Flow Matching</strong>. Klein, Krämer &amp; Noé, <a
+                href="https://arxiv.org/abs/2306.15030" target="_blank" rel="noopener"><em>Equivariant Flow
+                  Matching</em></a> (arXiv:2306.15030), NeurIPS 2023. §4 the equivariant OT objective, §6 experiments
+              (6.3 alanine dipeptide). The exact joint rotation/permutation minimization (Eq. 15) is called infeasible
+              and approximated sequentially (Eq. 16) by Hungarian then Kabsch; Appendix A.9 benchmarks that
+              approximation.</li>
+            <li><strong>Minibatch Wasserstein</strong>. Fatras, Zine, Flamary, Gribonval &amp; Courty, <a
+                href="https://arxiv.org/abs/1910.04091" target="_blank" rel="noopener"><em>Learning with minibatch
+                  Wasserstein: asymptotic and gradient properties</em></a> (arXiv:1910.04091), AISTATS 2020, PMLR
+              108:2131-2141. §3.3 basic properties (Proposition 1, \(U_h\ge W\); Proposition 2, unbiasedness;
+              Proposition 3, loss of the distance property), §3.4 asymptotics, §3.5 gradients.</li>
+            <li><strong>Rectified Flows and OT</strong>. Hertrich, Chambolle &amp; Delon, <a
+                href="https://arxiv.org/abs/2505.19712v3" target="_blank" rel="noopener"><em>On the Relation between
+                  Rectified Flows and Optimal Transport</em></a> (arXiv:2505.19712v3), NeurIPS 2025. §3 rectified flows
+              with gradient fields, §4 counterexamples (§4.1 disconnected supports and Proposition 10 on \(R^p\) fixed
+              points; Theorem 11 recovering equivalence under \(\operatorname{supp}(X_t)=\mathbb R^d\); §4.2
+              non-rectifiable couplings), Corollary 17 on vanishing loss coexisting with a cost and action gap.
+              Pin the version: v1 numbers these Proposition 8 and Corollary 14 and has no Theorem 11.</li>
+            <li><strong>React-OT</strong>. Duan et al., <a href="https://doi.org/10.1038/s42256-025-01010-0"
+                target="_blank" rel="noopener"><em>Optimal transport for generating transition states in chemical
+                  reactions</em></a>, Nature Machine Intelligence 7:615-626 (2025); arXiv:2404.13430. Methods →
+              "Dynamic optimal transport" for the Benamou-Brenier formulation, "Practical implementation of flow
+              matching" for \(x_0=(P+R)/2\), \(x_1=\mathrm{TS}\) and the near-optimal-coupling assumption,
+              "Equivariance in modelling chemical reactions" for symmetry alignment. Methods headings are unnumbered.
+              The arXiv abstract page still shows the earlier title.</li>
+            <li><strong>SemlaFlow</strong>. Irwin, Tibo, Janet &amp; Olsson, <a
+                href="https://proceedings.mlr.press/v258/irwin25a.html" target="_blank" rel="noopener"><em>SemlaFlow:
+                  Efficient 3D Molecular Generation with Latent Attention and Equivariant Flow Matching</em></a>,
+              AISTATS 2025, PMLR 258:3772-3780; arXiv:2406.07266v3. §4 equivariant OT as a minibatch transform, §5 and
+              Table 3 the sampling-step comparison. Cite the proceedings or v3; v1 names the model MolFlow and carries a
+              "scale OT" schedule the published version drops.</li>
+            <li><strong>GDB</strong>. Luo, Xu, He, Zheng, Liu &amp; Wang, <a href="https://arxiv.org/abs/2410.24220"
+                target="_blank" rel="noopener"><em>Bridging Geometric States via Geometric Diffusion Bridge</em></a>
+              (arXiv:2410.24220), NeurIPS 2024. §3.1 the equivariant diffusion bridge (Proposition 3.2, equivariant
+              Doob's \(h\)-transform; Theorem 3.3), §4.1 equilibrium-state prediction from coarse force-field
+              geometries, §4.2 structure relaxation on OC22 IS2RS.</li>
+            <li><strong>FlowLLM</strong>. Sriram, Miller, Chen &amp; Wood, <a href="https://arxiv.org/abs/2410.23405"
+                target="_blank" rel="noopener"><em>FlowLLM: Flow Matching for Material Generation with Large Language
+                  Models as Base Distributions</em></a> (arXiv:2410.23405), NeurIPS 2024. §4.1 the LLM base, §4.2
+              Riemannian flow matching, §4.3 consequences of using an LLM as the base distribution, §5.3 results.
+              Algorithm 1 (steps 5-7) and §5.1 give the source-target construction: a ground-truth material is drawn and
+              the LLM is prompted with <em>that material's chemical formula</em>, yielding formula-matched pairs. Note
+              that this conditioning is training-only. At sampling time the LLM is queried unconditionally.</li>
+            <li><strong>Schrödinger problem survey</strong>. Christian Léonard, <a
+                href="https://arxiv.org/abs/1308.0215" target="_blank" rel="noopener"><em>A Survey of the Schrödinger
+                  Problem and Some of Its Connections with Optimal Transport</em></a> (arXiv:1308.0215), Discrete
+              Contin. Dyn. Syst. A 34(4):1533-1574, 2014. The canonical source for <a href="#ahead">§5.10</a>: §2 states
+              the dynamic and static Schrödinger problems; §4 gives the standard examples, of which reversible Brownian
+              motion is the leading reference process; §5, "Slowing down," recovers optimal transport as a
+              slowing-down limit rather than by a small-noise argument as such. Its stochastic-control formulation
+              appears inside the literature history of §7, credited to Mikami, rather than as a formulation section of
+              its own.</li>
+            <li><strong>Topology of flows</strong>. Cornish, Caterini, Deligiannidis &amp; Doucet, <a
+                href="https://arxiv.org/abs/1909.13833" target="_blank" rel="noopener"><em>Relaxing Bijectivity
+                  Constraints with Continuously Indexed Normalising Flows</em></a> (arXiv:1909.13833), ICML 2020. The
+              support-topology reference for <a href="#science">§5.9</a>: a bijective flow is a homeomorphism and so
+              preserves the topology of its domain, and Theorem 2.1 shows that approximating a topologically
+              incompatible target forces the bi-Lipschitz constant to diverge; §4.4 notes ODE-based maps inherit the
+              same constraint. It says nothing about mode counts. That claim is separate, and it is argued here
+              directly.</li>
+          </ul>
+        </section>
+
+        <div class="nextprev">
+          <a href="../week5.html">← Week 5 overview</a>
+          <a href="problem-1.html">Start the problems →</a>
+        </div>
+      </article>
+      <aside class="side" aria-label="Page contents">
+        <div class="side-title">On this page</div>
+        <a href="#last-object">1. From path to pairing</a>
+        <a href="#what-fixed">2. What a coupling leaves fixed</a>
+        <a href="#curvature">3. Energy &amp; velocity ambiguity</a>
+        <a href="#ot">4. Optimal transport</a>
+        <a href="#sinkhorn">5. Entropic OT &amp; Sinkhorn</a>
+        <a href="#minibatch">6. Minibatch OT &amp; OT-CFM</a>
+        <a href="#reflow">7. Rectification</a>
+        <a href="#bases">8. Data-dependent bases</a>
+        <a href="#science">9. Couplings for science</a>
+        <a href="#ahead">10. Looking ahead</a>
+        <a href="#recap">11. Recap</a>
+        <a href="#references">12. References</a>
+      </aside>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap">Built as a lightweight course site. These notes condense the readings and link out to the
+      original papers.</div>
+  </footer>
+<script src="../../assets/nav.js" defer></script>
+</body>
+
+</html>
